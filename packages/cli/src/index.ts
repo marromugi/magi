@@ -11,6 +11,7 @@ import {
   listReviewSchedules,
   removeReviewSchedule,
   markReviewed,
+  generateWorkflow,
   closeDb,
   type IssueType,
   type IssuePriority,
@@ -261,6 +262,22 @@ function cmdReviewRun(args: string[]) {
   }
 }
 
+async function cmdGenerateWorkflow(args: string[]) {
+  const flags = parseFlags(args);
+  const dbPath = getDbPath();
+  migrate(dbPath);
+
+  const schedules = listReviewSchedules(dbPath).filter((s) => s.enabled);
+  const yaml = generateWorkflow(schedules);
+
+  if (flags.output) {
+    await Bun.write(flags.output, yaml);
+    console.log(`workflow written to ${flags.output}`);
+  } else {
+    process.stdout.write(yaml);
+  }
+}
+
 function printUsage() {
   console.log(`magi - autonomous coding agent orchestrator
 
@@ -324,6 +341,9 @@ async function main() {
           break;
         case "run":
           cmdReviewRun(rest);
+          break;
+        case "generate-workflow":
+          await cmdGenerateWorkflow(rest);
           break;
         default:
           die(`unknown review command: ${subcommand}`);
