@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { Issue } from "../../types";
 import { IssueList } from "./IssueList";
@@ -62,7 +62,9 @@ describe("IssueList", () => {
   it("renders all status variants with distinct data-status", () => {
     const statuses = ["queue", "active", "done", "blocked"] as const;
     for (const status of statuses) {
-      const { unmount } = render(<IssueList issues={[makeIssue({ status })]} />);
+      const { unmount } = render(
+        <IssueList issues={[makeIssue({ status })]} />,
+      );
       const badge = screen.getByTestId("status-badge");
       expect(badge.getAttribute("data-status")).toBe(status);
       unmount();
@@ -88,7 +90,10 @@ describe("IssueList", () => {
   it("renders multiple issues", () => {
     render(
       <IssueList
-        issues={[makeIssue({ id: 1, title: "First" }), makeIssue({ id: 2, title: "Second" })]}
+        issues={[
+          makeIssue({ id: 1, title: "First" }),
+          makeIssue({ id: 2, title: "Second" }),
+        ]}
       />,
     );
     expect(screen.getByText("First")).toBeTruthy();

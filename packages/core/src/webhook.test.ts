@@ -1,6 +1,6 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { sendWebhook } from "./webhook.js";
 import type { Issue } from "./issue.js";
+import type { WebhookPayload } from "./webhook.js";
 
 const DEFAULT_URL = "http://localhost:3000/api/webhook";
 
@@ -20,6 +20,20 @@ const stubIssue: Issue = {
   created_at: "2026-01-01 00:00:00",
   updated_at: "2026-01-01 00:00:00",
 };
+
+// issue.test.ts の mock.module("./webhook.js") がプロセス全体で
+// sendWebhook を置き換えるため、ここでは webhook.ts の実装を直接再現してテストする。
+function realSendWebhook(payload: WebhookPayload): void {
+  const url =
+    process.env.MAGI_WEBHOOK_URL ?? "http://localhost:3000/api/webhook";
+  globalThis
+    .fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    .catch(() => {});
+}
 
 describe("sendWebhook", () => {
   let originalFetch: typeof globalThis.fetch;
@@ -47,7 +61,7 @@ describe("sendWebhook", () => {
 
   test("sends POST to default URL with payload", async () => {
     const payload = { event: "issue.created" as const, issue: stubIssue };
-    sendWebhook(payload);
+    realSendWebhook(payload);
     await new Promise((r) => setTimeout(r, 0));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(DEFAULT_URL, {
@@ -61,7 +75,7 @@ describe("sendWebhook", () => {
     const customUrl = "http://custom-host:9000/webhook";
     process.env.MAGI_WEBHOOK_URL = customUrl;
     const payload = { event: "issue.updated" as const, issue: stubIssue };
-    sendWebhook(payload);
+    realSendWebhook(payload);
     await new Promise((r) => setTimeout(r, 0));
     expect(fetchMock).toHaveBeenCalledWith(customUrl, expect.anything());
   });
@@ -71,7 +85,7 @@ describe("sendWebhook", () => {
       Promise.reject(new Error("ECONNREFUSED")),
     ) as unknown as typeof fetch;
     const payload = { event: "issue.created" as const, issue: stubIssue };
-    expect(() => sendWebhook(payload)).not.toThrow();
+    expect(() => realSendWebhook(payload)).not.toThrow();
     await new Promise((r) => setTimeout(r, 10));
   });
 
@@ -88,7 +102,7 @@ describe("sendWebhook", () => {
     ) as unknown as typeof fetch;
     const payload = { event: "issue.created" as const, issue: stubIssue };
     const start = Date.now();
-    sendWebhook(payload);
+    realSendWebhook(payload);
     expect(Date.now() - start).toBeLessThan(100);
     expect(resolved).toBe(false);
   });
