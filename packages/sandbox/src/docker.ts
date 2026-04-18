@@ -56,6 +56,7 @@ export async function runSandbox(
     CLAUDE_CODE_OAUTH_TOKEN: oauthToken,
     GH_TOKEN: ghToken,
     ENABLE_FIREWALL: String(config.enableFirewall ?? false),
+    CREATE_PR: String(config.createPr ?? false),
   };
 
   if (config.commitMessage) env["COMMIT_MESSAGE"] = config.commitMessage;
@@ -64,6 +65,8 @@ export async function runSandbox(
   if (config.gitUserEmail) env["GIT_USER_EMAIL"] = config.gitUserEmail;
   if (config.oauthToken) env["CLAUDE_CODE_OAUTH_TOKEN"] = config.oauthToken;
   if (config.ghToken) env["GH_TOKEN"] = config.ghToken;
+  if (config.prTitle) env["PR_TITLE"] = config.prTitle;
+  if (config.prBody) env["PR_BODY"] = config.prBody;
 
   // Build docker run args
   const args: string[] = [
