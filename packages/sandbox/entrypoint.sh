@@ -105,6 +105,14 @@ fi
 
 claude "${CLAUDE_ARGS[@]}" "$PROMPT"
 
+# --- Format ---
+if [ -n "$(git status --porcelain)" ]; then
+  if [ -f "bun.lock" ] || [ -f "bunfig.toml" ]; then
+    log "Running bun format..."
+    bun run format || log "WARNING: bun format failed. Continuing."
+  fi
+fi
+
 # --- Commit & Push ---
 if [ -n "$(git status --porcelain)" ]; then
   log "Committing changes..."
