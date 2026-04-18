@@ -48,6 +48,7 @@ describe("createDaemon", () => {
 
   it("calls runIssue for each ready issue within concurrency", async () => {
     const issues = [makeIssue(1), makeIssue(2)];
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const runIssue = mock(async (_issue: Issue) => {});
     const daemon = createDaemon({
       interval: 60_000,
