@@ -1,0 +1,196 @@
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { closeDb, migrate } from "./db.js";
+import { createIssue, getIssue } from "./issue.js";
+import {
+  buildPrompt,
+  runImplementOrchestrator,
+  type OrchestratorConfig,
+  type SandboxRunner,
+} from "./orchestrator.js";
+
+const TEST_DB = ":memory:";
+
+beforeEach(() => {
+  closeDb();
+  migrate(TEST_DB);
+});
+
+afterEach(() => {
+  closeDb();
+});
+
+function makeRunner(overrides: Partial<Awaited<ReturnType<SandboxRunner>>> = {}): SandboxRunner {
+  return async (config) => ({
+    success: true,
+    exitCode: 0,
+    output: "",
+    branch: config.branch,
+    ...overrides,
+  });
+}
+
+describe("buildPrompt", () => {
+  it("includes issue title, type, branch, commit_message", () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Add feature X",
+      type: "feat",
+      acceptance: "Feature X works correctly",
+      branch: "feat/1-add-feature-x",
+      commit_message: "feat(core): add feature x",
+    });
+    const prompt = buildPrompt(issue);
+    expect(prompt).toContain("Add feature X");
+    expect(prompt).toContain("feat");
+    expect(prompt).toContain("feat/1-add-feature-x");
+    expect(prompt).toContain("feat(core): add feature x");
+  });
+
+  it("includes acceptance criteria", () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "Must pass all tests",
+    });
+    const prompt = buildPrompt(issue);
+    expect(prompt).toContain("Must pass all tests");
+  });
+
+  it("includes background context", () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "test",
+      context: "Some background context",
+    });
+    const prompt = buildPrompt(issue);
+    expect(prompt).toContain("Some background context");
+  });
+
+  it("includes TDD flow steps", () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "test",
+    });
+    const prompt = buildPrompt(issue);
+    expect(prompt).toContain("Step 1");
+    expect(prompt).toContain("Step 2");
+    expect(prompt).toContain("Red");
+    expect(prompt).toContain("Green");
+    expect(prompt).toContain("bun test");
+  });
+});
+
+describe("runImplementOrchestrator", () => {
+  it("sets status to done and updates branch on success", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "Feature works",
+      branch: "feat/1-test-issue",
+    });
+
+    const config: OrchestratorConfig = {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      runner: makeRunner(),
+    };
+
+    const result = await runImplementOrchestrator(issue, config);
+
+    expect(result.success).toBe(true);
+    const updated = getIssue(TEST_DB, issue.id);
+    expect(updated?.status).toBe("done");
+    expect(updated?.branch).toBe("feat/1-test-issue");
+  });
+
+  it("sets status to blocked on failure", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "Feature works",
+      branch: "feat/1-test-issue",
+    });
+
+    const config: OrchestratorConfig = {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      runner: makeRunner({ success: false, exitCode: 1 }),
+    };
+
+    const result = await runImplementOrchestrator(issue, config);
+
+    expect(result.success).toBe(false);
+    const updated = getIssue(TEST_DB, issue.id);
+    expect(updated?.status).toBe("blocked");
+  });
+
+  it("returns sandbox output in result", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "test",
+      branch: "feat/1-test",
+    });
+
+    const config: OrchestratorConfig = {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      runner: makeRunner({ output: "Detailed sandbox output" }),
+    };
+
+    const result = await runImplementOrchestrator(issue, config);
+    expect(result.output).toBe("Detailed sandbox output");
+  });
+
+  it("passes prompt with issue details to sandbox runner", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "My feature",
+      type: "feat",
+      acceptance: "Must work correctly",
+      context: "Important background",
+      branch: "feat/1-my-feature",
+    });
+
+    let capturedPrompt = "";
+    const capturingRunner: SandboxRunner = async (config) => {
+      capturedPrompt = config.prompt;
+      return { success: true, exitCode: 0, output: "", branch: config.branch };
+    };
+
+    await runImplementOrchestrator(issue, {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      runner: capturingRunner,
+    });
+
+    expect(capturedPrompt).toContain("My feature");
+    expect(capturedPrompt).toContain("Must work correctly");
+    expect(capturedPrompt).toContain("Important background");
+  });
+
+  it("passes baseBranch and repoPath to sandbox runner", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "test",
+      branch: "feat/1-test",
+    });
+
+    let capturedConfig: Parameters<SandboxRunner>[0] | null = null;
+    const capturingRunner: SandboxRunner = async (config) => {
+      capturedConfig = config;
+      return { success: true, exitCode: 0, output: "", branch: config.branch };
+    };
+
+    await runImplementOrchestrator(issue, {
+      dbPath: TEST_DB,
+      repoPath: "/my/repo",
+      baseBranch: "develop",
+      runner: capturingRunner,
+    });
+
+    expect(capturedConfig?.repoPath).toBe("/my/repo");
+    expect(capturedConfig?.baseBranch).toBe("develop");
+  });
+});
