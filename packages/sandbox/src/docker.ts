@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import * as fs from "fs";
 import {
   type SandboxConfig,
   type SandboxResult,
@@ -34,6 +35,31 @@ export async function imageExists(): Promise<boolean> {
     .quiet()
     .nothrow();
   return result.exitCode === 0;
+}
+
+function buildSshMountArgs(
+  sshAuthSock: string | undefined,
+  ghToken: string,
+): string[] {
+  if (!sshAuthSock) return [];
+  if (fs.existsSync(sshAuthSock)) {
+    return [
+      "-v",
+      `${sshAuthSock}:/ssh-agent:ro`,
+      "-e",
+      "SSH_AUTH_SOCK=/ssh-agent",
+    ];
+  }
+  if (ghToken) {
+    console.warn(
+      `[sandbox] WARNING: SSH_AUTH_SOCK "${sshAuthSock}" is not accessible. Using GH_TOKEN authentication.`,
+    );
+  } else {
+    console.error(
+      `[sandbox] ERROR: SSH_AUTH_SOCK "${sshAuthSock}" is not accessible and GH_TOKEN is not set. Git authentication may fail.`,
+    );
+  }
+  return [];
 }
 
 /**
@@ -79,15 +105,8 @@ export async function runSandbox(
     // Mount local repo as read-only
     "-v",
     `${config.repoPath}:/repo:ro`,
-    // SSH agent forwarding for git auth (if available)
-    ...(process.env["SSH_AUTH_SOCK"]
-      ? [
-          "-v",
-          `${process.env["SSH_AUTH_SOCK"]}:/ssh-agent:ro`,
-          "-e",
-          "SSH_AUTH_SOCK=/ssh-agent",
-        ]
-      : []),
+    // SSH agent forwarding for git auth (if available and socket is accessible)
+    ...buildSshMountArgs(process.env["SSH_AUTH_SOCK"], ghToken),
     // Block external network access when firewall is enabled
     ...(config.enableFirewall ? ["--network", "none"] : []),
   ];

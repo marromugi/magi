@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
+import * as fs from "fs";
 import { runSandbox } from "./docker.js";
 import type { SandboxConfig } from "./types.js";
 
@@ -245,5 +246,74 @@ describe("runSandbox mounts", () => {
     const args = spawnArgs(spy);
     const hasClaudeMount = args.some((a) => a.includes(".claude"));
     expect(hasClaudeMount).toBe(false);
+  });
+});
+
+describe("runSandbox SSH_AUTH_SOCK handling", () => {
+  let spawnSpy: ReturnType<typeof spyOn>;
+  let existsSpy: ReturnType<typeof spyOn> | undefined;
+
+  beforeEach(() => {
+    spawnSpy = makeSpawnMock();
+    existsSpy = undefined;
+    delete process.env["SSH_AUTH_SOCK"];
+    delete process.env["GH_TOKEN"];
+    delete process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+  });
+
+  afterEach(() => {
+    spawnSpy.mockRestore();
+    existsSpy?.mockRestore();
+  });
+
+  it("mounts SSH_AUTH_SOCK when set and socket path exists", async () => {
+    process.env["SSH_AUTH_SOCK"] = "/tmp/ssh-agent.sock";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    expect(args).toContain("/tmp/ssh-agent.sock:/ssh-agent:ro");
+    expect(envArgs(args)["SSH_AUTH_SOCK"]).toBe("/ssh-agent");
+  });
+
+  it("skips SSH mount when SSH_AUTH_SOCK path does not exist and GH_TOKEN is set", async () => {
+    process.env["SSH_AUTH_SOCK"] = "/nonexistent/ssh.sock";
+    process.env["GH_TOKEN"] = "my-gh-token";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(false);
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    expect(args.some((a) => a.includes("ssh-agent"))).toBe(false);
+  });
+
+  it("skips SSH mount when SSH_AUTH_SOCK path does not exist and GH_TOKEN is not set", async () => {
+    process.env["SSH_AUTH_SOCK"] = "/nonexistent/ssh.sock";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(false);
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    expect(args.some((a) => a.includes("ssh-agent"))).toBe(false);
+  });
+
+  it("logs warning when SSH_AUTH_SOCK inaccessible but GH_TOKEN is available", async () => {
+    process.env["SSH_AUTH_SOCK"] = "/nonexistent/ssh.sock";
+    process.env["GH_TOKEN"] = "my-gh-token";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(false);
+    const warnSpy = spyOn(console, "warn");
+    await runSandbox(baseConfig);
+    expect(warnSpy.mock.calls.length).toBeGreaterThan(0);
+    warnSpy.mockRestore();
+  });
+
+  it("logs error when SSH_AUTH_SOCK inaccessible and GH_TOKEN is not set", async () => {
+    process.env["SSH_AUTH_SOCK"] = "/nonexistent/ssh.sock";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(false);
+    const errorSpy = spyOn(console, "error");
+    await runSandbox(baseConfig);
+    expect(errorSpy.mock.calls.length).toBeGreaterThan(0);
+    errorSpy.mockRestore();
+  });
+
+  it("does not mount SSH agent when SSH_AUTH_SOCK is not set", async () => {
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    expect(args.some((a) => a.includes("ssh-agent"))).toBe(false);
   });
 });
