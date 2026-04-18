@@ -122,9 +122,7 @@ export async function runSandbox(
 
   clearTimeout(timeoutId);
 
-  const prUrlMatch = output.match(
-    /https:\/\/github\.com\/[^\s]+\/pull\/\d+/,
-  );
+  const prUrlMatch = output.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
 
   return {
     success: exitCode === 0,

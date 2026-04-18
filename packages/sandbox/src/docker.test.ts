@@ -162,7 +162,11 @@ describe("runSandbox prTitle fallback", () => {
   });
 
   it("uses commitMessage as PR_TITLE fallback when prTitle is not set", async () => {
-    await runSandbox({ ...baseConfig, commitMessage: "feat: my commit", createPr: true });
+    await runSandbox({
+      ...baseConfig,
+      commitMessage: "feat: my commit",
+      createPr: true,
+    });
     const env = envArgs(spawnArgs(spy));
     expect(env["PR_TITLE"]).toBe("feat: my commit");
   });
@@ -218,10 +222,7 @@ describe("runSandbox PR URL parsing", () => {
   });
 
   it("returns success and prUrl together when PR is created", async () => {
-    spy = makeSpawnMockWithOutput(
-      "https://github.com/org/project/pull/99",
-      0,
-    );
+    spy = makeSpawnMockWithOutput("https://github.com/org/project/pull/99", 0);
     const result = await runSandbox(baseConfig);
     expect(result.success).toBe(true);
     expect(result.prUrl).toBe("https://github.com/org/project/pull/99");
