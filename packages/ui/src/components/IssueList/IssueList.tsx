@@ -22,14 +22,16 @@ export function IssueList({ issues, onSelectIssue }: Props) {
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            {["ID", "Title", "Type", "Priority", "Status", "Depends On"].map((h) => (
-              <th
-                key={h}
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
-                {h}
-              </th>
-            ))}
+            {["ID", "Title", "Type", "Priority", "Status", "Depends On"].map(
+              (h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  {h}
+                </th>
+              ),
+            )}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -38,9 +40,13 @@ export function IssueList({ issues, onSelectIssue }: Props) {
             return (
               <tr key={issue.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm text-gray-900">{issue.id}</td>
-                <td className="px-4 py-3 text-sm text-gray-900">{issue.title}</td>
+                <td className="px-4 py-3 text-sm text-gray-900">
+                  {issue.title}
+                </td>
                 <td className="px-4 py-3 text-sm font-mono">{issue.type}</td>
-                <td className="px-4 py-3 text-sm text-gray-700">{issue.priority}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">
+                  {issue.priority}
+                </td>
                 <td className="px-4 py-3 text-sm">
                   <span
                     data-testid="status-badge"

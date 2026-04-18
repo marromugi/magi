@@ -296,14 +296,18 @@ async function cmdDaemonStart(args: string[]) {
   const intervalSec = Number(flags.interval ?? "30");
   const concurrency = Number(flags.concurrency ?? "1");
 
-  if (isNaN(intervalSec) || intervalSec <= 0) die("--interval must be a positive number");
-  if (isNaN(concurrency) || concurrency < 1) die("--concurrency must be a positive integer");
+  if (isNaN(intervalSec) || intervalSec <= 0)
+    die("--interval must be a positive number");
+  if (isNaN(concurrency) || concurrency < 1)
+    die("--concurrency must be a positive integer");
 
   const dbPath = getDbPath();
   migrate(dbPath);
 
   const ts = () => new Date().toISOString();
-  console.log(`[${ts()}] daemon starting (interval=${intervalSec}s, concurrency=${concurrency})`);
+  console.log(
+    `[${ts()}] daemon starting (interval=${intervalSec}s, concurrency=${concurrency})`,
+  );
 
   const daemon = createDaemon({
     interval: intervalSec * 1000,
@@ -331,7 +335,8 @@ async function cmdDaemonStart(args: string[]) {
       detect: (i) => console.log(`[${ts()}] detected  #${i.id} ${i.title}`),
       start: (i) => console.log(`[${ts()}] starting  #${i.id} ${i.title}`),
       complete: (i) => console.log(`[${ts()}] completed #${i.id} ${i.title}`),
-      fail: (i, err) => console.error(`[${ts()}] failed    #${i.id} ${i.title}: ${err}`),
+      fail: (i, err) =>
+        console.error(`[${ts()}] failed    #${i.id} ${i.title}: ${err}`),
     },
   });
 
@@ -377,8 +382,7 @@ async function cmdSandboxRun(args: string[]) {
 async function cmdSandboxBuild(args: string[]) {
   const flags = parseFlags(args);
   const dockerfilePath =
-    flags.dockerfile ??
-    resolve(import.meta.dir, "../../sandbox/Dockerfile");
+    flags.dockerfile ?? resolve(import.meta.dir, "../../sandbox/Dockerfile");
   await buildImage(dockerfilePath);
   console.log("magi-sandbox image built successfully");
 }
@@ -415,7 +419,6 @@ Commands:
   sandbox run --branch <b> --prompt <p> [options]  Run a sandbox container
   sandbox build [--dockerfile <path>]              Build the magi-sandbox image
   sandbox list                                     List running sandbox containers`);
-
 }
 
 // ── Router ──
