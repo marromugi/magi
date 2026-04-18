@@ -415,6 +415,115 @@ describe("checkDeps", () => {
   });
 });
 
+describe("listReadyIssues - blocked recovery", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-issue-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("returns blocked issue when all deps are done and updates status to queue", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "done" });
+    const blocked = createIssue(dbPath, {
+      title: "blocked",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    updateIssue(dbPath, blocked.id, { status: "blocked" });
+
+    const exec = mock(() => "");
+    const ready = listReadyIssues(dbPath, exec);
+
+    expect(ready.map((i) => i.id)).toContain(blocked.id);
+    expect(ready.find((i) => i.id === blocked.id)?.status).toBe("queue");
+  });
+
+  test("excludes blocked issue when deps are not done", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const blocked = createIssue(dbPath, {
+      title: "blocked",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    updateIssue(dbPath, blocked.id, { status: "blocked" });
+
+    const exec = mock(() => "");
+    const ready = listReadyIssues(dbPath, exec);
+
+    expect(ready.map((i) => i.id)).not.toContain(blocked.id);
+  });
+
+  test("persists status change to queue in DB after recovery", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "done" });
+    const blocked = createIssue(dbPath, {
+      title: "blocked",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    updateIssue(dbPath, blocked.id, { status: "blocked" });
+
+    const exec = mock(() => "");
+    listReadyIssues(dbPath, exec);
+
+    const updated = getIssue(dbPath, blocked.id);
+    expect(updated?.status).toBe("queue");
+  });
+
+  test("does not affect existing queue issue logic", () => {
+    const queue = createIssue(dbPath, {
+      title: "queue",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "done" });
+    const blocked = createIssue(dbPath, {
+      title: "blocked",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    updateIssue(dbPath, blocked.id, { status: "blocked" });
+
+    const exec = mock(() => "");
+    const ready = listReadyIssues(dbPath, exec);
+
+    expect(ready.map((i) => i.id)).toContain(queue.id);
+    expect(ready.map((i) => i.id)).toContain(blocked.id);
+  });
+});
+
 describe("createIssue webhook", () => {
   let tmpDir: string;
   let dbPath: string;
