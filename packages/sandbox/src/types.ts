@@ -46,6 +46,8 @@ export interface SandboxResult {
   branch: string;
   /** Container name used */
   containerName: string;
+  /** PR URL if a PR was created, undefined otherwise */
+  prUrl?: string;
 }
 
 export const SANDBOX_IMAGE = "magi-sandbox:latest";

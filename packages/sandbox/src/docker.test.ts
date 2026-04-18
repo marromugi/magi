@@ -148,6 +148,86 @@ describe("runSandbox PR creation env vars", () => {
   });
 });
 
+describe("runSandbox prTitle fallback", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    spy = makeSpawnMock();
+    delete process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+    delete process.env["GH_TOKEN"];
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("uses commitMessage as PR_TITLE fallback when prTitle is not set", async () => {
+    await runSandbox({ ...baseConfig, commitMessage: "feat: my commit", createPr: true });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_TITLE"]).toBe("feat: my commit");
+  });
+
+  it("uses prTitle over commitMessage when both are set", async () => {
+    await runSandbox({
+      ...baseConfig,
+      commitMessage: "feat: my commit",
+      prTitle: "My PR Title",
+      createPr: true,
+    });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_TITLE"]).toBe("My PR Title");
+  });
+
+  it("does not set PR_TITLE when neither prTitle nor commitMessage is set", async () => {
+    await runSandbox({ ...baseConfig, createPr: true });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_TITLE"]).toBeUndefined();
+  });
+});
+
+function makeSpawnMockWithOutput(stdout: string, exitCode = 0) {
+  return spyOn(Bun, "spawn").mockImplementation(() => {
+    return {
+      stdout: new Response(stdout).body as ReadableStream,
+      stderr: new Response("").body as ReadableStream,
+      exited: Promise.resolve(exitCode),
+      kill: () => {},
+    } as ReturnType<typeof Bun.spawn>;
+  });
+}
+
+describe("runSandbox PR URL parsing", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("parses PR URL from stdout and sets prUrl", async () => {
+    spy = makeSpawnMockWithOutput(
+      "Some output\nhttps://github.com/owner/repo/pull/42\nMore output",
+    );
+    const result = await runSandbox(baseConfig);
+    expect(result.prUrl).toBe("https://github.com/owner/repo/pull/42");
+  });
+
+  it("sets prUrl to undefined when no PR URL in output", async () => {
+    spy = makeSpawnMockWithOutput("Some output without PR URL");
+    const result = await runSandbox(baseConfig);
+    expect(result.prUrl).toBeUndefined();
+  });
+
+  it("returns success and prUrl together when PR is created", async () => {
+    spy = makeSpawnMockWithOutput(
+      "https://github.com/org/project/pull/99",
+      0,
+    );
+    const result = await runSandbox(baseConfig);
+    expect(result.success).toBe(true);
+    expect(result.prUrl).toBe("https://github.com/org/project/pull/99");
+  });
+});
+
 describe("runSandbox mounts", () => {
   let spy: ReturnType<typeof spyOn>;
 
