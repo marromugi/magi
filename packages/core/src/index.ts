@@ -33,4 +33,5 @@ export {
   updateReviewSchedule,
   removeReviewSchedule,
   markReviewed,
+  generateWorkflow,
 } from "./review.js";

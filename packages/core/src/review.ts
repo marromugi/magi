@@ -114,6 +114,36 @@ export function removeReviewSchedule(dbPath: string, id: number): boolean {
   return result.changes > 0;
 }
 
+export function generateWorkflow(schedules: ReviewSchedule[]): string {
+  const scheduleTrigger =
+    schedules.length > 0
+      ? `  schedule:\n${schedules.map((s) => `    - cron: '${s.cron_expr}'`).join("\n")}\n`
+      : "";
+
+  const reviewSteps = schedules
+    .map((s) => {
+      const since = s.last_reviewed_at ?? "";
+      return `      - run: magi review run --branch ${s.branch} --since "${since}"`;
+    })
+    .join("\n");
+
+  return `name: MAGI Review
+on:
+${scheduleTrigger}  workflow_dispatch: {}
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run build
+${reviewSteps}
+`;
+}
+
 /** last_reviewed_at を現在時刻に更新する */
 export function markReviewed(
   dbPath: string,
