@@ -9,6 +9,13 @@ IFS=$'\n\t'
 
 echo "[firewall] Configuring network restrictions..."
 
+# --- NET_ADMIN capability check ---
+# iptables requires NET_ADMIN; gracefully skip in unprivileged containers
+if ! iptables -L >/dev/null 2>&1; then
+    echo "[firewall] WARNING: iptables unavailable (NET_ADMIN capability required). Skipping firewall setup."
+    exit 0
+fi
+
 # --- Docker DNS ルールを退避 ---
 DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
 
