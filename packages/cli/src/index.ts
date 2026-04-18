@@ -18,6 +18,7 @@ import {
   type IssueStatus,
 } from "@magi/core";
 import { formatReviewAsMarkdown } from "./review-formatter";
+import { createDaemon } from "./daemon.js";
 
 // ── Helpers ──
 
@@ -278,6 +279,63 @@ async function cmdGenerateWorkflow(args: string[]) {
   }
 }
 
+async function cmdDaemonStart(args: string[]) {
+  const flags = parseFlags(args);
+  const intervalSec = Number(flags.interval ?? "30");
+  const concurrency = Number(flags.concurrency ?? "1");
+
+  if (isNaN(intervalSec) || intervalSec <= 0) die("--interval must be a positive number");
+  if (isNaN(concurrency) || concurrency < 1) die("--concurrency must be a positive integer");
+
+  const dbPath = getDbPath();
+  migrate(dbPath);
+
+  const ts = () => new Date().toISOString();
+  console.log(`[${ts()}] daemon starting (interval=${intervalSec}s, concurrency=${concurrency})`);
+
+  const daemon = createDaemon({
+    interval: intervalSec * 1000,
+    concurrency,
+    fetchReadyIssues: () => listReadyIssues(dbPath),
+    runIssue: async (issue) => {
+      updateIssue(dbPath, issue.id, { status: "active" });
+      const proc = Bun.spawn(
+        ["claude", "--dangerously-skip-permissions", "--print", "/implement"],
+        {
+          cwd: getProjectRoot(),
+          env: { ...process.env, MAGI_ISSUE_ID: String(issue.id) },
+          stdout: "inherit",
+          stderr: "inherit",
+        },
+      );
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        updateIssue(dbPath, issue.id, { status: "blocked" });
+        throw new Error(`process exited with code ${exitCode}`);
+      }
+      updateIssue(dbPath, issue.id, { status: "done" });
+    },
+    logger: {
+      detect: (i) => console.log(`[${ts()}] detected  #${i.id} ${i.title}`),
+      start: (i) => console.log(`[${ts()}] starting  #${i.id} ${i.title}`),
+      complete: (i) => console.log(`[${ts()}] completed #${i.id} ${i.title}`),
+      fail: (i, err) => console.error(`[${ts()}] failed    #${i.id} ${i.title}: ${err}`),
+    },
+  });
+
+  daemon.start();
+  console.log(`[${ts()}] daemon ready`);
+
+  await new Promise<void>((resolve) => {
+    process.on("SIGINT", async () => {
+      console.log(`\n[${ts()}] shutting down...`);
+      await daemon.stop();
+      console.log(`[${ts()}] stopped`);
+      resolve();
+    });
+  });
+}
+
 function printUsage() {
   console.log(`magi - autonomous coding agent orchestrator
 
@@ -294,6 +352,7 @@ Commands:
   review list                List review schedules
   review remove <id>         Remove a review schedule
   review run [<id>]          Run review (collect commits since last review)
+  daemon start [options]     Start daemon (--interval <s>, --concurrency <n>)
   check-interrupt <file>     Check if file is blocked by an interrupt issue`);
 }
 
@@ -348,6 +407,10 @@ async function main() {
         default:
           die(`unknown review command: ${subcommand}`);
       }
+      break;
+    case "daemon":
+      if (subcommand === "start") await cmdDaemonStart(rest);
+      else die(`unknown daemon command: ${subcommand}`);
       break;
     case "check-interrupt":
       await cmdCheckInterrupt([subcommand ?? "", ...rest]);
