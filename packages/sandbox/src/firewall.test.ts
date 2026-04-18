@@ -11,7 +11,7 @@ function makeFailing(dir: string, name: string) {
   const path = `${dir}/${name}`;
   writeFileSync(
     path,
-    "#!/bin/bash\necho \"${0##*/}: Operation not permitted\" >&2\nexit 1\n",
+    '#!/bin/bash\necho "${0##*/}: Operation not permitted" >&2\nexit 1\n',
   );
   chmodSync(path, 0o755);
 }
