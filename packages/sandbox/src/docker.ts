@@ -1,0 +1,143 @@
+import { $ } from "bun";
+import {
+  type SandboxConfig,
+  type SandboxResult,
+  SANDBOX_IMAGE,
+  DEFAULT_TIMEOUT,
+} from "./types.js";
+
+function generateContainerName(): string {
+  const id = Math.random().toString(36).slice(2, 10);
+  return `magi-sandbox-${id}`;
+}
+
+function resolveClaudeConfigPath(config: SandboxConfig): string {
+  return config.claudeConfigPath ?? `${process.env["HOME"] ?? "/root"}/.claude`;
+}
+
+/**
+ * Build the magi-sandbox Docker image.
+ * Call this once before running sandboxes.
+ */
+export async function buildImage(dockerfilePath: string): Promise<void> {
+  const contextDir = dockerfilePath.replace(/\/Dockerfile$/, "");
+  const result =
+    await $`docker build -t ${SANDBOX_IMAGE} -f ${dockerfilePath} ${contextDir}`.quiet();
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Failed to build sandbox image: ${result.stderr.toString()}`,
+    );
+  }
+}
+
+/**
+ * Check if the magi-sandbox image exists locally.
+ */
+export async function imageExists(): Promise<boolean> {
+  const result = await $`docker image inspect ${SANDBOX_IMAGE}`
+    .quiet()
+    .nothrow();
+  return result.exitCode === 0;
+}
+
+/**
+ * Run a sandbox container with the given configuration.
+ */
+export async function runSandbox(
+  config: SandboxConfig,
+): Promise<SandboxResult> {
+  const containerName = config.containerName ?? generateContainerName();
+  const claudeConfigPath = resolveClaudeConfigPath(config);
+  const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+
+  const env: Record<string, string> = {
+    BRANCH: config.branch,
+    BASE_BRANCH: config.baseBranch ?? "main",
+    PROMPT: config.prompt,
+  };
+
+  if (config.commitMessage) env["COMMIT_MESSAGE"] = config.commitMessage;
+  if (config.model) env["CLAUDE_MODEL"] = config.model;
+  if (config.gitUserName) env["GIT_USER_NAME"] = config.gitUserName;
+  if (config.gitUserEmail) env["GIT_USER_EMAIL"] = config.gitUserEmail;
+
+  // Build docker run args
+  const args: string[] = [
+    "docker",
+    "run",
+    "--rm",
+    "--name",
+    containerName,
+    // Mount local repo as read-only
+    "-v",
+    `${config.repoPath}:/repo:ro`,
+    // Mount ~/.claude as read-only for OAuth auth
+    "-v",
+    `${claudeConfigPath}:/root/.claude:ro`,
+    // SSH agent forwarding for git auth (if available)
+    ...(process.env["SSH_AUTH_SOCK"]
+      ? [
+          "-v",
+          `${process.env["SSH_AUTH_SOCK"]}:/ssh-agent:ro`,
+          "-e",
+          "SSH_AUTH_SOCK=/ssh-agent",
+        ]
+      : []),
+  ];
+
+  // Add environment variables
+  for (const [key, value] of Object.entries(env)) {
+    args.push("-e", `${key}=${value}`);
+  }
+
+  args.push(SANDBOX_IMAGE);
+
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  // Timeout handling
+  const timeoutId = setTimeout(() => {
+    proc.kill();
+  }, timeout);
+
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  const exitCode = await proc.exited;
+
+  clearTimeout(timeoutId);
+
+  return {
+    success: exitCode === 0,
+    exitCode,
+    output: stdout + stderr,
+    branch: config.branch,
+    containerName,
+  };
+}
+
+/**
+ * Remove a running or stopped sandbox container.
+ */
+export async function removeSandbox(containerName: string): Promise<void> {
+  await $`docker rm -f ${containerName}`.quiet().nothrow();
+}
+
+/**
+ * List running sandbox containers.
+ */
+export async function listSandboxes(): Promise<string[]> {
+  const result =
+    await $`docker ps --filter name=magi-sandbox --format "{{.Names}}"`
+      .quiet()
+      .nothrow();
+  if (result.exitCode !== 0) return [];
+  return result.stdout
+    .toString()
+    .trim()
+    .split("\n")
+    .filter((n) => n.length > 0);
+}

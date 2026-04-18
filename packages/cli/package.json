@@ -1,0 +1,16 @@
+{
+  "name": "@magi/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "magi": "./dist/index.js"
+  },
+  "dependencies": {
+    "@magi/core": "workspace:*"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "tsup",
+    "test": "bun test"
+  }
+}
