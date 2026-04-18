@@ -81,19 +81,29 @@ describe("createDaemon", () => {
   it("does not process the same issue concurrently", async () => {
     let runCount = 0;
     const issue = makeIssue(1);
-    let fetchCount = 0;
+
+    const { promise: runStarted, resolve: resolveRunStarted } =
+      Promise.withResolvers<void>();
+    const { promise: allowComplete, resolve: resolveAllowComplete } =
+      Promise.withResolvers<void>();
 
     const daemon = createDaemon({
       interval: 10,
       concurrency: 2,
-      fetchReadyIssues: () => (fetchCount++ < 5 ? [issue] : []),
+      fetchReadyIssues: () => [issue],
       runIssue: async () => {
         runCount++;
-        await Bun.sleep(50);
+        resolveRunStarted();
+        await allowComplete;
       },
     });
     daemon.start();
-    await Bun.sleep(80);
+    await runStarted;
+    // Let several ticks fire while issue is in-flight
+    await Bun.sleep(50);
+    // Issue should not have been started again
+    expect(runCount).toBe(1);
+    resolveAllowComplete();
     await daemon.stop();
     expect(runCount).toBe(1);
   });
