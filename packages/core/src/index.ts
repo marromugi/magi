@@ -31,6 +31,22 @@ export {
 } from "./daemon.js";
 
 export {
+  type SandboxRunConfig,
+  type SandboxRunResult,
+  type SandboxRunner,
+  type OrchestratorConfig,
+  type OrchestratorResult,
+  buildPrompt,
+  runImplementOrchestrator,
+} from "./orchestrator.js";
+
+export {
+  type WebhookEvent,
+  type WebhookPayload,
+  sendWebhook,
+} from "./webhook.js";
+
+export {
   type ReviewSchedule,
   type CreateReviewScheduleInput,
   type UpdateReviewScheduleInput,
@@ -40,4 +56,5 @@ export {
   updateReviewSchedule,
   removeReviewSchedule,
   markReviewed,
+  generateWorkflow,
 } from "./review.js";

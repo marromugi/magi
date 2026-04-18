@@ -11,11 +11,13 @@ import {
   listReviewSchedules,
   removeReviewSchedule,
   markReviewed,
+  generateWorkflow,
   closeDb,
   type IssueType,
   type IssuePriority,
   type IssueStatus,
 } from "@magi/core";
+import { formatReviewAsMarkdown } from "./review-formatter";
 
 // ── Helpers ──
 
@@ -203,7 +205,11 @@ function cmdReviewRemove(args: string[]) {
 }
 
 function cmdReviewRun(args: string[]) {
-  const id = args[0] ? Number(args[0]) : undefined;
+  const flags = parseFlags(args);
+  const outputFormat = flags["output-format"] ?? "json";
+  const idArg = args.find((a) => /^\d+$/.test(a));
+  const id = idArg ? Number(idArg) : undefined;
+
   const dbPath = getDbPath();
   const schedules = listReviewSchedules(dbPath);
 
@@ -218,7 +224,6 @@ function cmdReviewRun(args: string[]) {
     const since = schedule.last_reviewed_at ?? "";
     const sinceArg = since ? `--since="${since}"` : "";
 
-    // git log の結果を JSON で出力
     const result = Bun.spawnSync(
       [
         "git",
@@ -238,21 +243,38 @@ function cmdReviewRun(args: string[]) {
         })
       : [];
 
-    console.log(
-      JSON.stringify(
-        {
-          schedule_id: schedule.id,
-          branch: schedule.branch,
-          prompt: schedule.prompt,
-          since: since || null,
-          commits,
-        },
-        null,
-        2,
-      ),
-    );
+    const data = {
+      schedule_id: schedule.id,
+      cron_expr: schedule.cron_expr,
+      branch: schedule.branch,
+      prompt: schedule.prompt,
+      since: since || null,
+      commits,
+    };
+
+    if (outputFormat === "markdown") {
+      console.log(formatReviewAsMarkdown(data));
+    } else {
+      console.log(JSON.stringify(data, null, 2));
+    }
 
     markReviewed(dbPath, schedule.id);
+  }
+}
+
+async function cmdGenerateWorkflow(args: string[]) {
+  const flags = parseFlags(args);
+  const dbPath = getDbPath();
+  migrate(dbPath);
+
+  const schedules = listReviewSchedules(dbPath).filter((s) => s.enabled);
+  const yaml = generateWorkflow(schedules);
+
+  if (flags.output) {
+    await Bun.write(flags.output, yaml);
+    console.log(`workflow written to ${flags.output}`);
+  } else {
+    process.stdout.write(yaml);
   }
 }
 
@@ -319,6 +341,9 @@ async function main() {
           break;
         case "run":
           cmdReviewRun(rest);
+          break;
+        case "generate-workflow":
+          await cmdGenerateWorkflow(rest);
           break;
         default:
           die(`unknown review command: ${subcommand}`);
