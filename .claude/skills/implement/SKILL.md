@@ -7,6 +7,7 @@ description: "Issue DB の issue を Docker sandbox で TDD 実装し、PR を�
 
 Issue DB に登録された issue を Docker コンテナ (magi-sandbox) 内で TDD 実装し、PR を作成します。
 コンテナ内では `--dangerously-skip-permissions` で完全自律実行されます。
+認証には `CLAUDE_CODE_OAUTH_TOKEN` を使用します（`claude setup-token` で生成）。
 
 ## CLI
 
@@ -48,7 +49,21 @@ REPO_PATH=$(git rev-parse --show-toplevel)
 BASE_BRANCH=$(git branch --show-current)
 ```
 
-### 4. sandbox イメージの確認
+### 4. 認証トークンの読み込み
+
+```bash
+# .env から CLAUDE_CODE_OAUTH_TOKEN を読み込む
+set -a && source "$REPO_PATH/.env" && set +a
+
+# トークンの存在確認
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  echo "ERROR: CLAUDE_CODE_OAUTH_TOKEN が設定されていません"
+  echo "claude setup-token を実行してトークンを生成し、.env に設定してください"
+  exit 1
+fi
+```
+
+### 5. sandbox イメージの確認
 
 ```bash
 # イメージの存在確認。なければビルド
@@ -56,7 +71,7 @@ docker image inspect magi-sandbox:latest 2>/dev/null || \
   docker build -t magi-sandbox:latest -f packages/sandbox/Dockerfile packages/sandbox/
 ```
 
-### 5. 実装プロンプトの組み立て
+### 6. 実装プロンプトの組み立て
 
 以下のテンプレートでプロンプトを組み立てる:
 
@@ -99,31 +114,43 @@ docker image inspect magi-sandbox:latest 2>/dev/null || \
 - テスト実行: bun test
 ```
 
-### 6. コンテナの起動
+### 7. コンテナの起動
+
+ログディレクトリを作成し、コンテナ出力をファイルに保存する:
+
+```bash
+LOG_DIR="$REPO_PATH/.claude/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/sandbox-issue-<ID>.log"
+```
 
 ```bash
 docker run --rm \
   --name "magi-sandbox-issue-<ID>" \
+  --cap-add=NET_ADMIN \
+  --cap-add=NET_RAW \
   -v "$REPO_PATH:/repo:ro" \
-  -v "$HOME/.claude:/root/.claude:ro" \
   -e "BRANCH=<branch>" \
   -e "BASE_BRANCH=$BASE_BRANCH" \
   -e "PROMPT=<上記テンプレートを展開したもの>" \
   -e "COMMIT_MESSAGE=<commit_message>" \
-  magi-sandbox:latest
+  -e "CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN" \
+  magi-sandbox:latest 2>&1 | tee "$LOG_FILE"
+EXIT_CODE=${PIPESTATUS[0]}
 ```
 
 コンテナ内部のフロー:
 
-1. `/repo` (read-only) を `/workspace/repo` にコピー
-2. `BASE_BRANCH` から `BRANCH` を作成
-3. 依存パッケージをインストール
-4. `claude --dangerously-skip-permissions --print` でプロンプトを実行
-5. 変更があれば commit & push (remote が設定されている場合)
+1. ファイアウォールで外部通信を制限（npm / GitHub / Claude API のみ許可）
+2. `/repo` (read-only) を `/workspace/repo` にコピー
+3. `BASE_BRANCH` から `BRANCH` を作成
+4. 依存パッケージをインストール
+5. `claude --dangerously-skip-permissions --print` でプロンプトを実行
+6. 変更があれば commit & push (remote が設定されている場合)
 
-### 7. 結果の処理
+### 8. 結果の処理
 
-コンテナの終了コードで成功/失敗を判定する。
+`EXIT_CODE` (PIPESTATUS[0]) で成功/失敗を判定する。ログは `$LOG_FILE` に保存済み。
 
 #### 成功時 (exit 0)
 
@@ -166,7 +193,7 @@ EOF
 bun run magi issue update <ID> --status blocked
 ```
 
-### 8. 複数 Issue の並列実装
+### 9. 複数 Issue の並列実装
 
 複数の独立した issue を同時に実装する場合、複数の `docker run` を並列で実行する。
 各コンテナは独立しているため安全に並列化できる。
@@ -175,10 +202,13 @@ bun run magi issue update <ID> --status blocked
 # 実装可能な issue を全て取得
 bun run magi issue ready
 
-# 各 issue を並列でコンテナ起動
-docker run --rm --name magi-sandbox-issue-1 ... &
-docker run --rm --name magi-sandbox-issue-2 ... &
-docker run --rm --name magi-sandbox-issue-3 ... &
+LOG_DIR="$REPO_PATH/.claude/logs"
+mkdir -p "$LOG_DIR"
+
+# 各 issue を並列でコンテナ起動 (ログをファイルに保存)
+docker run --rm --name magi-sandbox-issue-1 ... 2>&1 | tee "$LOG_DIR/sandbox-issue-1.log" &
+docker run --rm --name magi-sandbox-issue-2 ... 2>&1 | tee "$LOG_DIR/sandbox-issue-2.log" &
+docker run --rm --name magi-sandbox-issue-3 ... 2>&1 | tee "$LOG_DIR/sandbox-issue-3.log" &
 wait
 ```
 
