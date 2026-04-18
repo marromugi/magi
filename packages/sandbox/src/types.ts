@@ -15,8 +15,12 @@ export interface SandboxConfig {
   gitUserName?: string;
   /** Git user email (default: "magi-sandbox@localhost") */
   gitUserEmail?: string;
-  /** Path to host ~/.claude directory for OAuth auth */
-  claudeConfigPath?: string;
+  /** OAuth token for Claude Code auth (default: process.env.CLAUDE_CODE_OAUTH_TOKEN) */
+  oauthToken?: string;
+  /** GitHub token for git auth (default: process.env.GH_TOKEN) */
+  ghToken?: string;
+  /** Enable network firewall in container (default: false) */
+  enableFirewall?: boolean;
   /** Container name (auto-generated if omitted) */
   containerName?: string;
   /** Timeout in milliseconds (default: 600000 = 10 min) */
