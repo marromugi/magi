@@ -7,6 +7,6 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   dts: true,
-  external: ["@magi/core", "bun:sqlite"],
+  external: ["@magi/core", "@magi/sandbox", "bun:sqlite"],
   banner: { js: "#!/usr/bin/env bun" },
 });
