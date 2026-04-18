@@ -85,7 +85,11 @@ bun run magi issue update <ID> --status active
 ### 4. sandbox の起動
 
 `magi sandbox run` コマンドを使用してコンテナを起動する。
-トークン検証・イメージ確認は `magi sandbox run` が自動処理する。
+以下は `magi sandbox run` が自動処理するため、スキル側での対応は不要:
+
+- `CLAUDE_CODE_OAUTH_TOKEN` の検証（未設定時はエラー終了）
+- `GH_TOKEN` の解決（環境変数 or `gh auth token` から自動取得）
+- sandbox イメージの存在確認
 
 事前に `.env` から `CLAUDE_CODE_OAUTH_TOKEN` を読み込んでおく:
 
