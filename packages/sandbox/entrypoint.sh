@@ -52,6 +52,13 @@ fi
 git config --global user.name "$GIT_USER_NAME"
 git config --global user.email "$GIT_USER_EMAIL"
 
+# --- Git Authentication ---
+if [ -n "${GH_TOKEN:-}" ]; then
+  log "Configuring Git authentication with GH_TOKEN..."
+  git config --global "url.https://x-access-token:${GH_TOKEN}@github.com/.insteadOf" "https://github.com/"
+  git config --global "url.https://x-access-token:${GH_TOKEN}@github.com/.pushInsteadOf" "git@github.com:"
+fi
+
 # --- Copy repo & setup branch ---
 log "Copying repository..."
 cp -a /repo /workspace/repo
