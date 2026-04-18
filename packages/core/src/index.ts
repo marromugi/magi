@@ -24,6 +24,13 @@ export {
 export { type InterruptResult, checkInterrupt } from "./interrupt.js";
 
 export {
+  type DaemonOptions,
+  type DaemonHandle,
+  DEFAULT_INTERVAL_MS,
+  startDaemon,
+} from "./daemon.js";
+
+export {
   type SandboxRunConfig,
   type SandboxRunResult,
   type SandboxRunner,
