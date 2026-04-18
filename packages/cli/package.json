@@ -6,7 +6,8 @@
     "magi": "./dist/index.js"
   },
   "dependencies": {
-    "@magi/core": "workspace:*"
+    "@magi/core": "workspace:*",
+    "@magi/sandbox": "workspace:*"
   },
   "scripts": {
     "dev": "bun run --watch src/index.ts",

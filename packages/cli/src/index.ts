@@ -1,3 +1,15 @@
+import { resolve } from "path";
+import {
+  buildImage,
+  imageExists,
+  runSandbox,
+  listSandboxes,
+} from "@magi/sandbox";
+import {
+  resolveGhToken,
+  resolveOauthToken,
+  buildSandboxConfig,
+} from "./sandbox-helpers";
 import {
   migrate,
   defaultDbPath,
@@ -336,6 +348,52 @@ async function cmdDaemonStart(args: string[]) {
   });
 }
 
+async function cmdSandboxRun(args: string[]) {
+  const flags = parseFlags(args);
+  if (!flags.branch) die("--branch is required");
+  if (!flags.prompt) die("--prompt is required");
+
+  const oauthToken = resolveOauthToken();
+  if (!oauthToken)
+    die(
+      "CLAUDE_CODE_OAUTH_TOKEN is not set. Please set it to your Claude OAuth token.",
+    );
+
+  const repoPath = flags.repo ?? process.cwd();
+  const ghToken = await resolveGhToken();
+  const config = buildSandboxConfig(repoPath, flags, oauthToken, ghToken);
+
+  const exists = await imageExists();
+  if (!exists) {
+    console.error(
+      "warning: magi-sandbox image not found. Run 'magi sandbox build' first.",
+    );
+  }
+
+  const result = await runSandbox({ ...config, stream: true });
+  process.exit(result.exitCode);
+}
+
+async function cmdSandboxBuild(args: string[]) {
+  const flags = parseFlags(args);
+  const dockerfilePath =
+    flags.dockerfile ??
+    resolve(import.meta.dir, "../../sandbox/Dockerfile");
+  await buildImage(dockerfilePath);
+  console.log("magi-sandbox image built successfully");
+}
+
+async function cmdSandboxList() {
+  const containers = await listSandboxes();
+  if (containers.length === 0) {
+    console.log("no running sandbox containers");
+  } else {
+    for (const name of containers) {
+      console.log(name);
+    }
+  }
+}
+
 function printUsage() {
   console.log(`magi - autonomous coding agent orchestrator
 
@@ -353,7 +411,11 @@ Commands:
   review remove <id>         Remove a review schedule
   review run [<id>]          Run review (collect commits since last review)
   daemon start [options]     Start daemon (--interval <s>, --concurrency <n>)
-  check-interrupt <file>     Check if file is blocked by an interrupt issue`);
+  check-interrupt <file>     Check if file is blocked by an interrupt issue
+  sandbox run --branch <b> --prompt <p> [options]  Run a sandbox container
+  sandbox build [--dockerfile <path>]              Build the magi-sandbox image
+  sandbox list                                     List running sandbox containers`);
+
 }
 
 // ── Router ──
@@ -411,6 +473,21 @@ async function main() {
     case "daemon":
       if (subcommand === "start") await cmdDaemonStart(rest);
       else die(`unknown daemon command: ${subcommand}`);
+      break;
+    case "sandbox":
+      switch (subcommand) {
+        case "run":
+          await cmdSandboxRun(rest);
+          break;
+        case "build":
+          await cmdSandboxBuild(rest);
+          break;
+        case "list":
+          await cmdSandboxList();
+          break;
+        default:
+          die(`unknown sandbox command: ${subcommand}`);
+      }
       break;
     case "check-interrupt":
       await cmdCheckInterrupt([subcommand ?? "", ...rest]);

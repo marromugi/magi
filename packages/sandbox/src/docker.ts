@@ -62,6 +62,8 @@ export async function runSandbox(
   if (config.model) env["CLAUDE_MODEL"] = config.model;
   if (config.gitUserName) env["GIT_USER_NAME"] = config.gitUserName;
   if (config.gitUserEmail) env["GIT_USER_EMAIL"] = config.gitUserEmail;
+  if (config.oauthToken) env["CLAUDE_CODE_OAUTH_TOKEN"] = config.oauthToken;
+  if (config.ghToken) env["GH_TOKEN"] = config.ghToken;
 
   // Build docker run args
   const args: string[] = [
@@ -82,6 +84,8 @@ export async function runSandbox(
           "SSH_AUTH_SOCK=/ssh-agent",
         ]
       : []),
+    // Block external network access when firewall is enabled
+    ...(config.enableFirewall ? ["--network", "none"] : []),
   ];
 
   // Add environment variables
@@ -91,9 +95,10 @@ export async function runSandbox(
 
   args.push(SANDBOX_IMAGE);
 
+  const streaming = config.stream ?? false;
   const proc = Bun.spawn(args, {
-    stdout: "pipe",
-    stderr: "pipe",
+    stdout: streaming ? "inherit" : "pipe",
+    stderr: streaming ? "inherit" : "pipe",
   });
 
   // Timeout handling
@@ -101,10 +106,14 @@ export async function runSandbox(
     proc.kill();
   }, timeout);
 
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
+  let output = "";
+  if (!streaming) {
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout as ReadableStream).text(),
+      new Response(proc.stderr as ReadableStream).text(),
+    ]);
+    output = stdout + stderr;
+  }
   const exitCode = await proc.exited;
 
   clearTimeout(timeoutId);
@@ -112,7 +121,7 @@ export async function runSandbox(
   return {
     success: exitCode === 0,
     exitCode,
-    output: stdout + stderr,
+    output,
     branch: config.branch,
     containerName,
   };

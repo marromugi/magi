@@ -24,6 +24,7 @@
       },
       "dependencies": {
         "@magi/core": "workspace:*",
+        "@magi/sandbox": "workspace:*",
       },
     },
     "packages/core": {
