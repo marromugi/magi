@@ -11,6 +11,7 @@ import {
   listIssues,
   updateIssue,
   listReadyIssues,
+  addDependency,
 } from "./issue.js";
 import { sendWebhook } from "./webhook.js";
 import { closeDb, migrate } from "./db.js";
@@ -179,6 +180,141 @@ describe("listReadyIssues", () => {
       ([, args]: [string, string[]]) => args[0] === "fetch",
     );
     expect(fetchCalls).toHaveLength(1);
+  });
+});
+
+describe("addDependency", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-issue-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("adds depId to issue's depends_on", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const result = addDependency(dbPath, issue.id, dep.id);
+    expect(JSON.parse(result.depends_on)).toContain(dep.id);
+  });
+
+  test("returns error if depId already in depends_on", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    expect(() => addDependency(dbPath, issue.id, dep.id)).toThrow();
+  });
+
+  test("returns error if depId issue does not exist", () => {
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+    });
+    expect(() => addDependency(dbPath, issue.id, 9999)).toThrow();
+  });
+
+  test("returns error if issueId equals depId (self-dependency)", () => {
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+    });
+    expect(() => addDependency(dbPath, issue.id, issue.id)).toThrow();
+  });
+
+  test("returns error if adding dep would create circular dependency", () => {
+    // A depends on B; adding A as dep of B would cycle
+    const a = createIssue(dbPath, {
+      title: "A",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const b = createIssue(dbPath, {
+      title: "B",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [a.id],
+    });
+    expect(() => addDependency(dbPath, a.id, b.id)).toThrow();
+  });
+
+  test("returns error if adding dep would create indirect circular dependency", () => {
+    // A → B → C; adding A as dep of C would cycle
+    const a = createIssue(dbPath, {
+      title: "A",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const b = createIssue(dbPath, {
+      title: "B",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [a.id],
+    });
+    const c = createIssue(dbPath, {
+      title: "C",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [b.id],
+    });
+    expect(() => addDependency(dbPath, a.id, c.id)).toThrow();
+  });
+
+  test("changes status to blocked when issue is active", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, { status: "active" });
+    const result = addDependency(dbPath, issue.id, dep.id);
+    expect(result.status).toBe("blocked");
+  });
+
+  test("returns error if issue is done", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, { status: "done" });
+    expect(() => addDependency(dbPath, issue.id, dep.id)).toThrow();
   });
 });
 
