@@ -142,6 +142,54 @@ export function updateIssue(
   return issue;
 }
 
+function hasCycle(dbPath: string, startId: number, targetId: number): boolean {
+  const visited = new Set<number>();
+  const stack = [startId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === targetId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const issue = getIssue(dbPath, current);
+    if (issue) {
+      stack.push(...(JSON.parse(issue.depends_on) as number[]));
+    }
+  }
+  return false;
+}
+
+export function addDependency(
+  dbPath: string,
+  issueId: number,
+  depId: number,
+): Issue {
+  if (issueId === depId) throw new Error("Cannot add self-dependency");
+
+  const issue = getIssue(dbPath, issueId);
+  if (!issue) throw new Error(`Issue ${issueId} not found`);
+  if (issue.status === "done")
+    throw new Error("Cannot add dependency to a done issue");
+
+  const dep = getIssue(dbPath, depId);
+  if (!dep) throw new Error(`Issue ${depId} not found`);
+
+  const currentDeps = JSON.parse(issue.depends_on) as number[];
+  if (currentDeps.includes(depId))
+    throw new Error(`Dependency ${depId} already exists`);
+
+  if (hasCycle(dbPath, depId, issueId))
+    throw new Error("Circular dependency detected");
+
+  const newDeps = JSON.stringify([...currentDeps, depId]);
+  const d = db(dbPath);
+  d.run("UPDATE issues SET depends_on = ? WHERE id = ?", [newDeps, issueId]);
+  if (issue.status === "active") {
+    d.run("UPDATE issues SET status = 'blocked' WHERE id = ?", [issueId]);
+  }
+
+  return getIssue(dbPath, issueId)!;
+}
+
 /** 依存が全て done かつリモートブランチが削除済みの queue issue を返す */
 export function listReadyIssues(
   dbPath: string,
