@@ -28,7 +28,10 @@ describe("formatReviewAsMarkdown", () => {
   });
 
   test("shows since date when provided", () => {
-    const md = formatReviewAsMarkdown({ ...base, since: "2024-01-01 00:00:00" });
+    const md = formatReviewAsMarkdown({
+      ...base,
+      since: "2024-01-01 00:00:00",
+    });
     expect(md).toContain("2024-01-01 00:00:00");
     expect(md).not.toContain("all time");
   });
@@ -47,7 +50,12 @@ describe("formatReviewAsMarkdown", () => {
     const md = formatReviewAsMarkdown({
       ...base,
       commits: [
-        { hash: "abc1234567890", author: "Alice", date: "2024-01-01 10:00:00 +0900", subject: "Fix bug" },
+        {
+          hash: "abc1234567890",
+          author: "Alice",
+          date: "2024-01-01 10:00:00 +0900",
+          subject: "Fix bug",
+        },
       ],
     });
     expect(md).toContain("| Hash |");
@@ -59,7 +67,14 @@ describe("formatReviewAsMarkdown", () => {
   test("truncates commit hash to 7 characters", () => {
     const md = formatReviewAsMarkdown({
       ...base,
-      commits: [{ hash: "abc1234567890", author: "Alice", date: "2024-01-01", subject: "Fix bug" }],
+      commits: [
+        {
+          hash: "abc1234567890",
+          author: "Alice",
+          date: "2024-01-01",
+          subject: "Fix bug",
+        },
+      ],
     });
     expect(md).toContain("abc1234");
     expect(md).not.toContain("abc12345678");
@@ -68,7 +83,14 @@ describe("formatReviewAsMarkdown", () => {
   test("includes author and subject in commit row", () => {
     const md = formatReviewAsMarkdown({
       ...base,
-      commits: [{ hash: "abc1234567890", author: "Bob", date: "2024-01-01", subject: "Add feature" }],
+      commits: [
+        {
+          hash: "abc1234567890",
+          author: "Bob",
+          date: "2024-01-01",
+          subject: "Add feature",
+        },
+      ],
     });
     expect(md).toContain("Bob");
     expect(md).toContain("Add feature");

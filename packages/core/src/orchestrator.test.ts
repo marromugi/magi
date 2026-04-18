@@ -19,7 +19,9 @@ afterEach(() => {
   closeDb();
 });
 
-function makeRunner(overrides: Partial<Awaited<ReturnType<SandboxRunner>>> = {}): SandboxRunner {
+function makeRunner(
+  overrides: Partial<Awaited<ReturnType<SandboxRunner>>> = {},
+): SandboxRunner {
   return async (config) => ({
     success: true,
     exitCode: 0,

@@ -16,7 +16,9 @@ export interface SandboxRunResult {
   branch: string;
 }
 
-export type SandboxRunner = (config: SandboxRunConfig) => Promise<SandboxRunResult>;
+export type SandboxRunner = (
+  config: SandboxRunConfig,
+) => Promise<SandboxRunResult>;
 
 export interface OrchestratorConfig {
   dbPath: string;
@@ -91,7 +93,10 @@ export async function runImplementOrchestrator(
   });
 
   if (result.success) {
-    updateIssue(config.dbPath, issue.id, { status: "done", branch: result.branch });
+    updateIssue(config.dbPath, issue.id, {
+      status: "done",
+      branch: result.branch,
+    });
   } else {
     updateIssue(config.dbPath, issue.id, { status: "blocked" });
   }

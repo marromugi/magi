@@ -43,7 +43,10 @@ describe("startDaemon", () => {
       await new Promise((r) => setTimeout(r, 200));
     });
 
-    const daemon = startDaemon({ dbPath: ":memory:", intervalMs: 50, dispatch }, deps);
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 50, dispatch },
+      deps,
+    );
     await new Promise((r) => setTimeout(r, 80));
     daemon.stop();
 
@@ -60,7 +63,10 @@ describe("startDaemon", () => {
       await new Promise((r) => setTimeout(r, 50));
     });
 
-    const daemon = startDaemon({ dbPath: ":memory:", intervalMs: 500, dispatch }, deps);
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 500, dispatch },
+      deps,
+    );
     await new Promise((r) => setTimeout(r, 120));
     daemon.stop();
 
@@ -77,7 +83,10 @@ describe("startDaemon", () => {
       await new Promise((r) => setTimeout(r, 300));
     });
 
-    const daemon = startDaemon({ dbPath: ":memory:", intervalMs: 30, dispatch }, deps);
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 30, dispatch },
+      deps,
+    );
     await new Promise((r) => setTimeout(r, 120));
     daemon.stop();
 
@@ -89,18 +98,26 @@ describe("startDaemon", () => {
     const deps = makeDeps([issue]);
     const dispatch = mock(async () => {});
 
-    const daemon = startDaemon({ dbPath: ":memory:", intervalMs: 500, dispatch }, deps);
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 500, dispatch },
+      deps,
+    );
     await new Promise((r) => setTimeout(r, 50));
     daemon.stop();
 
-    expect(deps.updateIssue).toHaveBeenCalledWith(":memory:", 1, { status: "active" });
+    expect(deps.updateIssue).toHaveBeenCalledWith(":memory:", 1, {
+      status: "active",
+    });
   });
 
   test("stops polling after stop() is called", async () => {
     const deps = makeDeps([]);
     const dispatch = mock(async () => {});
 
-    const daemon = startDaemon({ dbPath: ":memory:", intervalMs: 30, dispatch }, deps);
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 30, dispatch },
+      deps,
+    );
     await new Promise((r) => setTimeout(r, 50));
     const countBefore = deps.listReadyIssues.mock.calls.length;
     daemon.stop();

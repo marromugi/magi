@@ -19,11 +19,23 @@ export const DEFAULT_INTERVAL_MS = 30_000;
 
 interface DaemonDeps {
   listReadyIssues: (dbPath: string) => Issue[];
-  updateIssue: (dbPath: string, id: number, input: UpdateIssueInput) => Issue | null;
+  updateIssue: (
+    dbPath: string,
+    id: number,
+    input: UpdateIssueInput,
+  ) => Issue | null;
 }
 
-export function startDaemon(options: DaemonOptions, deps?: Partial<DaemonDeps>): DaemonHandle {
-  const { dbPath, intervalMs = DEFAULT_INTERVAL_MS, dispatch, onError } = options;
+export function startDaemon(
+  options: DaemonOptions,
+  deps?: Partial<DaemonDeps>,
+): DaemonHandle {
+  const {
+    dbPath,
+    intervalMs = DEFAULT_INTERVAL_MS,
+    dispatch,
+    onError,
+  } = options;
   const listFn = deps?.listReadyIssues ?? _listReadyIssues;
   const updateFn = deps?.updateIssue ?? _updateIssue;
   const inFlight = new Set<number>();
