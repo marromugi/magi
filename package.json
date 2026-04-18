@@ -12,7 +12,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "bun run --filter '*' test"
+    "test": "bun run --filter '*' test",
+    "ui:dev": "bun run --filter @magi/ui tauri:dev",
+    "ui:build": "bun run --filter @magi/ui tauri:build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
