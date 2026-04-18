@@ -52,7 +52,9 @@ fi
 # --- Firewall ---
 if [ "$ENABLE_FIREWALL" = "true" ]; then
   log "Setting up firewall..."
-  sudo /usr/local/bin/init-firewall.sh
+  if ! sudo /usr/local/bin/init-firewall.sh; then
+    log "WARNING: Firewall setup failed. Continuing without firewall protection."
+  fi
 fi
 
 # --- Git Config ---
