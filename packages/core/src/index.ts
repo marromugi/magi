@@ -24,6 +24,12 @@ export {
 export { type InterruptResult, checkInterrupt } from "./interrupt.js";
 
 export {
+  type WebhookEvent,
+  type WebhookPayload,
+  sendWebhook,
+} from "./webhook.js";
+
+export {
   type ReviewSchedule,
   type CreateReviewScheduleInput,
   type UpdateReviewScheduleInput,

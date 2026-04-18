@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { getDb } from "./db.js";
+import { sendWebhook } from "./webhook.js";
 
 // ── Types ──
 
@@ -67,7 +68,9 @@ export function createIssue(dbPath: string, input: CreateIssueInput): Issue {
       input.commit_message ?? null,
     ],
   );
-  return getIssue(dbPath, Number(result.lastInsertRowid))!;
+  const issue = getIssue(dbPath, Number(result.lastInsertRowid))!;
+  sendWebhook({ event: "issue.created", issue });
+  return issue;
 }
 
 export function getIssue(dbPath: string, id: number): Issue | null {
@@ -118,7 +121,9 @@ export function updateIssue(
 
   values.push(id);
   db(dbPath).run(`UPDATE issues SET ${sets.join(", ")} WHERE id = ?`, values);
-  return getIssue(dbPath, id);
+  const issue = getIssue(dbPath, id);
+  if (issue) sendWebhook({ event: "issue.updated", issue });
+  return issue;
 }
 
 /** 依存が全て done の queue issue を返す */
