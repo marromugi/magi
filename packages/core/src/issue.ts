@@ -61,6 +61,26 @@ function defaultExec(cmd: string, args: string[]): string {
   return stdout?.toString() ?? "";
 }
 
+export type ExecResultWithStatus = { stdout: string; exitCode: number };
+export type ExecFnWithStatus = (
+  cmd: string,
+  args: string[],
+) => ExecResultWithStatus;
+
+function defaultExecWithStatus(
+  cmd: string,
+  args: string[],
+): ExecResultWithStatus {
+  const proc = Bun.spawnSync([cmd, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return {
+    stdout: proc.stdout?.toString() ?? "",
+    exitCode: proc.exitCode ?? 0,
+  };
+}
+
 // ── CRUD ──
 
 export function createIssue(dbPath: string, input: CreateIssueInput): Issue {
@@ -273,4 +293,28 @@ export function listReadyIssues(
   }
 
   return ready;
+}
+
+export function rebaseIssueBranch(
+  dbPath: string,
+  issueId: number,
+  exec: ExecFnWithStatus = defaultExecWithStatus,
+): Error | null {
+  const issue = getIssue(dbPath, issueId);
+  if (!issue?.branch) return null;
+
+  exec("git", ["fetch", "origin"]);
+
+  const ls = exec("git", ["ls-remote", "--heads", "origin", issue.branch]);
+  if (ls.stdout.trim() === "") return null;
+
+  const rebase = exec("git", ["rebase", "origin/main", issue.branch]);
+  if (rebase.exitCode !== 0) {
+    exec("git", ["rebase", "--abort"]);
+    updateIssue(dbPath, issueId, { status: "blocked" });
+    return new Error(`Rebase conflict on ${issue.branch}`);
+  }
+
+  exec("git", ["push", "--force-with-lease", "origin", issue.branch]);
+  return null;
 }
