@@ -21,6 +21,7 @@ export interface Issue {
   branch: string | null;
   commit_message: string | null;
   worktree_path: string | null;
+  session_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +42,7 @@ export interface UpdateIssueInput {
   status?: IssueStatus;
   branch?: string;
   worktree_path?: string;
+  session_id?: string | null;
 }
 
 // ── Helpers ──
@@ -112,7 +114,7 @@ export function updateIssue(
   input: UpdateIssueInput,
 ): Issue | null {
   const sets: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
 
   if (input.status !== undefined) {
     sets.push("status = ?");
@@ -125,6 +127,10 @@ export function updateIssue(
   if (input.worktree_path !== undefined) {
     sets.push("worktree_path = ?");
     values.push(input.worktree_path);
+  }
+  if (input.session_id !== undefined) {
+    sets.push("session_id = ?");
+    values.push(input.session_id);
   }
 
   if (sets.length === 0) return getIssue(dbPath, id);

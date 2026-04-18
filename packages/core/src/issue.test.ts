@@ -5,7 +5,13 @@ mock.module("./webhook.js", () => ({
   sendWebhook: mock(() => {}),
 }));
 
-import { createIssue, updateIssue, listReadyIssues } from "./issue.js";
+import {
+  createIssue,
+  getIssue,
+  listIssues,
+  updateIssue,
+  listReadyIssues,
+} from "./issue.js";
 import { sendWebhook } from "./webhook.js";
 import { closeDb, migrate } from "./db.js";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -232,5 +238,73 @@ describe("createIssue webhook", () => {
 
     updateIssue(dbPath, issue.id, {});
     expect(mockSendWebhook).not.toHaveBeenCalled();
+  });
+});
+
+describe("session_id", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-issue-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("session_id is null by default on createIssue", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+    });
+    expect(issue.session_id).toBeNull();
+  });
+
+  test("getIssue returns session_id", () => {
+    const created = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const fetched = getIssue(dbPath, created.id);
+    expect(fetched).not.toBeNull();
+    expect("session_id" in fetched!).toBe(true);
+  });
+
+  test("listIssues returns session_id on each issue", () => {
+    createIssue(dbPath, { title: "T", type: "feat", acceptance: "ok" });
+    const issues = listIssues(dbPath);
+    expect(issues).toHaveLength(1);
+    expect("session_id" in issues[0]).toBe(true);
+  });
+
+  test("updateIssue can set session_id", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const updated = updateIssue(dbPath, issue.id, {
+      session_id: "ses_abc123",
+    });
+    expect(updated?.session_id).toBe("ses_abc123");
+  });
+
+  test("updateIssue can clear session_id to null", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, { session_id: "ses_abc123" });
+    const cleared = updateIssue(dbPath, issue.id, { session_id: null });
+    expect(cleared?.session_id).toBeNull();
   });
 });

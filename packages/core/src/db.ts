@@ -59,6 +59,13 @@ const MIGRATIONS = [
       ALTER TABLE review_schedules ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
     `,
   },
+  {
+    version: 4,
+    name: "add-session-id",
+    up: `
+      ALTER TABLE issues ADD COLUMN session_id TEXT;
+    `,
+  },
 ] as const;
 
 let _db: Database | null = null;
