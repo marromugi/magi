@@ -12,6 +12,7 @@ import {
   updateIssue,
   listReadyIssues,
   addDependency,
+  checkDeps,
 } from "./issue.js";
 import { sendWebhook } from "./webhook.js";
 import { closeDb, migrate } from "./db.js";
@@ -249,7 +250,6 @@ describe("addDependency", () => {
   });
 
   test("returns error if adding dep would create circular dependency", () => {
-    // A depends on B; adding A as dep of B would cycle
     const a = createIssue(dbPath, {
       title: "A",
       type: "feat",
@@ -265,7 +265,6 @@ describe("addDependency", () => {
   });
 
   test("returns error if adding dep would create indirect circular dependency", () => {
-    // A → B → C; adding A as dep of C would cycle
     const a = createIssue(dbPath, {
       title: "A",
       type: "feat",
@@ -315,6 +314,104 @@ describe("addDependency", () => {
     });
     updateIssue(dbPath, issue.id, { status: "done" });
     expect(() => addDependency(dbPath, issue.id, dep.id)).toThrow();
+  });
+});
+
+describe("checkDeps", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-issue-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("returns blocked: false when issue has no dependencies", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+    });
+    expect(checkDeps(dbPath, issue.id)).toEqual({ blocked: false });
+  });
+
+  test("returns blocked: false when all dependencies are done", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "done" });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    expect(checkDeps(dbPath, issue.id)).toEqual({ blocked: false });
+  });
+
+  test("returns blocked: true with unresolved deps when a dependency is not done", () => {
+    const dep = createIssue(dbPath, {
+      title: "pending dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    const result = checkDeps(dbPath, issue.id);
+    expect(result.blocked).toBe(true);
+    if (result.blocked) {
+      expect(result.unresolvedDeps).toHaveLength(1);
+      expect(result.unresolvedDeps[0]).toEqual({
+        id: dep.id,
+        title: "pending dep",
+        status: "queue",
+      });
+    }
+  });
+
+  test("includes only unresolved deps when some are done and some are not", () => {
+    const done = createIssue(dbPath, {
+      title: "done dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, done.id, { status: "done" });
+    const pending = createIssue(dbPath, {
+      title: "active dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, pending.id, { status: "active" });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [done.id, pending.id],
+    });
+    const result = checkDeps(dbPath, issue.id);
+    expect(result.blocked).toBe(true);
+    if (result.blocked) {
+      expect(result.unresolvedDeps).toHaveLength(1);
+      expect(result.unresolvedDeps[0].id).toBe(pending.id);
+    }
+  });
+
+  test("throws an error when issue does not exist", () => {
+    expect(() => checkDeps(dbPath, 9999)).toThrow();
   });
 });
 

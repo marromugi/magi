@@ -14,11 +14,13 @@ export {
   type IssueStatus,
   type CreateIssueInput,
   type UpdateIssueInput,
+  type CheckDepsResult,
   createIssue,
   getIssue,
   listIssues,
   updateIssue,
   listReadyIssues,
+  checkDeps,
 } from "./issue.js";
 
 export { type InterruptResult, checkInterrupt } from "./interrupt.js";
