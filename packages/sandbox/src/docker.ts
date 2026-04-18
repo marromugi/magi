@@ -37,10 +37,18 @@ export async function imageExists(): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-function buildSshMountArgs(sshAuthSock: string | undefined, ghToken: string): string[] {
+function buildSshMountArgs(
+  sshAuthSock: string | undefined,
+  ghToken: string,
+): string[] {
   if (!sshAuthSock) return [];
   if (fs.existsSync(sshAuthSock)) {
-    return ["-v", `${sshAuthSock}:/ssh-agent:ro`, "-e", "SSH_AUTH_SOCK=/ssh-agent"];
+    return [
+      "-v",
+      `${sshAuthSock}:/ssh-agent:ro`,
+      "-e",
+      "SSH_AUTH_SOCK=/ssh-agent",
+    ];
   }
   if (ghToken) {
     console.warn(
