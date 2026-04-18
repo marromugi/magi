@@ -37,12 +37,20 @@ export async function imageExists(): Promise<boolean> {
   return result.exitCode === 0;
 }
 
+/**
+ * Detect paths that exist on macOS but cannot be mounted by Docker Desktop.
+ * Docker Desktop cannot mount macOS launchd-managed socket paths.
+ */
+function isDockerUnmountable(sockPath: string): boolean {
+  return /\/com\.apple\.launchd\./.test(sockPath);
+}
+
 function buildSshMountArgs(
   sshAuthSock: string | undefined,
   ghToken: string,
 ): string[] {
   if (!sshAuthSock) return [];
-  if (fs.existsSync(sshAuthSock)) {
+  if (fs.existsSync(sshAuthSock) && !isDockerUnmountable(sshAuthSock)) {
     return [
       "-v",
       `${sshAuthSock}:/ssh-agent:ro`,

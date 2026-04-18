@@ -275,6 +275,16 @@ describe("runSandbox SSH_AUTH_SOCK handling", () => {
     expect(envArgs(args)["SSH_AUTH_SOCK"]).toBe("/ssh-agent");
   });
 
+  it("skips SSH mount when SSH_AUTH_SOCK is a macOS launchd socket path", async () => {
+    process.env["SSH_AUTH_SOCK"] =
+      "/private/tmp/com.apple.launchd.abc123/Listeners";
+    process.env["GH_TOKEN"] = "my-gh-token";
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    expect(args.some((a) => a.includes("ssh-agent"))).toBe(false);
+  });
+
   it("skips SSH mount when SSH_AUTH_SOCK path does not exist and GH_TOKEN is set", async () => {
     process.env["SSH_AUTH_SOCK"] = "/nonexistent/ssh.sock";
     process.env["GH_TOKEN"] = "my-gh-token";
