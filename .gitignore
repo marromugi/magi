@@ -12,6 +12,7 @@ coverage
 
 # logs
 logs
+.claude/logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
@@ -36,3 +37,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # claude config
 .claude/settings*.json
 .claude/issues.db
+
+# env files
+.env
+.env.*.local
