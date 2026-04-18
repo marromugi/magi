@@ -217,14 +217,15 @@ export function checkDeps(dbPath: string, issueId: number): CheckDepsResult {
   return { blocked: true, unresolvedDeps: unresolved };
 }
 
-/** 依存が全て done かつリモートブランチが削除済みの queue issue を返す */
+/** 依存が全て done かつリモートブランチが削除済みの queue/blocked issue を返す。
+ *  blocked issue が復帰条件を満たす場合は status を queue に更新する。 */
 export function listReadyIssues(
   dbPath: string,
   exec: ExecFn = defaultExec,
 ): Issue[] {
   const candidates = db(dbPath)
     .query<Issue, []>(
-      `SELECT * FROM issues AS i WHERE i.status = 'queue'
+      `SELECT * FROM issues AS i WHERE i.status IN ('queue', 'blocked')
        AND NOT EXISTS (
          SELECT 1 FROM json_each(i.depends_on) AS d
          JOIN issues dep ON dep.id = CAST(d.value AS INTEGER)
@@ -235,8 +236,12 @@ export function listReadyIssues(
     .all();
 
   let fetched = false;
-  return candidates.filter((issue) => {
+  const ready: Issue[] = [];
+
+  for (const issue of candidates) {
     const deps = JSON.parse(issue.depends_on) as number[];
+    let excluded = false;
+
     for (const depId of deps) {
       const dep = getIssue(dbPath, depId);
       if (dep?.branch) {
@@ -250,9 +255,22 @@ export function listReadyIssues(
           "origin",
           dep.branch,
         ]);
-        if (output.trim() !== "") return false;
+        if (output.trim() !== "") {
+          excluded = true;
+          break;
+        }
       }
     }
-    return true;
-  });
+
+    if (!excluded) {
+      if (issue.status === "blocked") {
+        const recovered = updateIssue(dbPath, issue.id, { status: "queue" });
+        if (recovered) ready.push(recovered);
+      } else {
+        ready.push(issue);
+      }
+    }
+  }
+
+  return ready;
 }
