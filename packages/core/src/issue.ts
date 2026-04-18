@@ -49,6 +49,16 @@ function db(dbPath: string): Database {
   return getDb(dbPath);
 }
 
+export type ExecFn = (cmd: string, args: string[]) => string;
+
+function defaultExec(cmd: string, args: string[]): string {
+  const { stdout } = Bun.spawnSync([cmd, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return stdout?.toString() ?? "";
+}
+
 // ── CRUD ──
 
 export function createIssue(dbPath: string, input: CreateIssueInput): Issue {
@@ -126,17 +136,37 @@ export function updateIssue(
   return issue;
 }
 
-/** 依存が全て done の queue issue を返す */
-export function listReadyIssues(dbPath: string): Issue[] {
-  return db(dbPath)
+/** 依存が全て done かつリモートブランチが削除済みの queue issue を返す */
+export function listReadyIssues(
+  dbPath: string,
+  exec: ExecFn = defaultExec,
+): Issue[] {
+  const candidates = db(dbPath)
     .query<Issue, []>(
-      `SELECT * FROM issues WHERE status = 'queue'
+      `SELECT * FROM issues AS i WHERE i.status = 'queue'
        AND NOT EXISTS (
-         SELECT 1 FROM json_each(depends_on) AS d
+         SELECT 1 FROM json_each(i.depends_on) AS d
          JOIN issues dep ON dep.id = CAST(d.value AS INTEGER)
          WHERE dep.status != 'done'
        )
-       ORDER BY id`,
+       ORDER BY i.id`,
     )
     .all();
+
+  let fetched = false;
+  return candidates.filter((issue) => {
+    const deps = JSON.parse(issue.depends_on) as number[];
+    for (const depId of deps) {
+      const dep = getIssue(dbPath, depId);
+      if (dep?.branch) {
+        if (!fetched) {
+          exec("git", ["fetch", "--prune", "origin"]);
+          fetched = true;
+        }
+        const output = exec("git", ["ls-remote", "--heads", "origin", dep.branch]);
+        if (output.trim() !== "") return false;
+      }
+    }
+    return true;
+  });
 }
