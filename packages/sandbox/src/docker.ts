@@ -11,10 +11,6 @@ function generateContainerName(): string {
   return `magi-sandbox-${id}`;
 }
 
-function resolveClaudeConfigPath(config: SandboxConfig): string {
-  return config.claudeConfigPath ?? `${process.env["HOME"] ?? "/root"}/.claude`;
-}
-
 /**
  * Build the magi-sandbox Docker image.
  * Call this once before running sandboxes.
@@ -47,13 +43,19 @@ export async function runSandbox(
   config: SandboxConfig,
 ): Promise<SandboxResult> {
   const containerName = config.containerName ?? generateContainerName();
-  const claudeConfigPath = resolveClaudeConfigPath(config);
   const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+
+  const oauthToken =
+    config.oauthToken ?? process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";
+  const ghToken = config.ghToken ?? process.env["GH_TOKEN"] ?? "";
 
   const env: Record<string, string> = {
     BRANCH: config.branch,
     BASE_BRANCH: config.baseBranch ?? "main",
     PROMPT: config.prompt,
+    CLAUDE_CODE_OAUTH_TOKEN: oauthToken,
+    GH_TOKEN: ghToken,
+    ENABLE_FIREWALL: String(config.enableFirewall ?? false),
   };
 
   if (config.commitMessage) env["COMMIT_MESSAGE"] = config.commitMessage;
@@ -71,9 +73,6 @@ export async function runSandbox(
     // Mount local repo as read-only
     "-v",
     `${config.repoPath}:/repo:ro`,
-    // Mount ~/.claude as read-only for OAuth auth
-    "-v",
-    `${claudeConfigPath}:/root/.claude:ro`,
     // SSH agent forwarding for git auth (if available)
     ...(process.env["SSH_AUTH_SOCK"]
       ? [
