@@ -286,6 +286,47 @@ describe("runSandbox mounts", () => {
   });
 });
 
+describe("runSandbox settings.json mount", () => {
+  let spawnSpy: ReturnType<typeof spyOn>;
+  let existsSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    spawnSpy = makeSpawnMock();
+    delete process.env["SSH_AUTH_SOCK"];
+  });
+
+  afterEach(() => {
+    spawnSpy.mockRestore();
+    existsSpy?.mockRestore();
+  });
+
+  it("mounts default settings.json to /magi/settings.json when file exists", async () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    const magiMount = args.find((a) => a.endsWith(":/magi/settings.json:ro"));
+    expect(magiMount).toBeTruthy();
+    expect(magiMount).toMatch(/settings\.json:\/magi\/settings\.json:ro$/);
+  });
+
+  it("mounts custom settingsPath to /magi/settings.json when provided", async () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(true);
+    await runSandbox({
+      ...baseConfig,
+      settingsPath: "/custom/my-settings.json",
+    });
+    const args = spawnArgs(spawnSpy);
+    expect(args).toContain("/custom/my-settings.json:/magi/settings.json:ro");
+  });
+
+  it("skips settings mount when settings file does not exist", async () => {
+    existsSpy = spyOn(fs, "existsSync").mockReturnValue(false);
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spawnSpy);
+    expect(args.some((a) => a.includes("/magi/settings.json"))).toBe(false);
+  });
+});
+
 describe("runSandbox SSH_AUTH_SOCK handling", () => {
   let spawnSpy: ReturnType<typeof spyOn>;
   let existsSpy: ReturnType<typeof spyOn> | undefined;

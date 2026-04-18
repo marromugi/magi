@@ -71,6 +71,14 @@ fi
 # --- Copy repo & setup branch ---
 log "Copying repository..."
 cp -a /repo /workspace/repo
+
+# Inject sandbox-specific settings.json (overrides repo's .claude/settings.json)
+if [ -f "/magi/settings.json" ]; then
+  mkdir -p /workspace/repo/.claude
+  cp /magi/settings.json /workspace/repo/.claude/settings.json
+  log "Injected sandbox settings.json"
+fi
+
 cd /workspace/repo
 
 # remote URL を取得 (push 用)

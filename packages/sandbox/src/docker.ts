@@ -1,11 +1,14 @@
 import { $ } from "bun";
 import * as fs from "fs";
+import { resolve } from "path";
 import {
   type SandboxConfig,
   type SandboxResult,
   SANDBOX_IMAGE,
   DEFAULT_TIMEOUT,
 } from "./types.js";
+
+const DEFAULT_SETTINGS_PATH = resolve(import.meta.dir, "../settings.json");
 
 function generateContainerName(): string {
   const id = Math.random().toString(36).slice(2, 10);
@@ -43,6 +46,12 @@ export async function imageExists(): Promise<boolean> {
  */
 function isDockerUnmountable(sockPath: string): boolean {
   return /\/com\.apple\.launchd\./.test(sockPath);
+}
+
+function buildSettingsMountArgs(settingsPath?: string): string[] {
+  const filePath = settingsPath ?? DEFAULT_SETTINGS_PATH;
+  if (!fs.existsSync(filePath)) return [];
+  return ["-v", `${filePath}:/magi/settings.json:ro`];
 }
 
 function buildSshMountArgs(
@@ -113,6 +122,8 @@ export async function runSandbox(
     // Mount local repo as read-only
     "-v",
     `${config.repoPath}:/repo:ro`,
+    // Mount sandbox-specific settings.json (POSIX-compatible hooks)
+    ...buildSettingsMountArgs(config.settingsPath),
     // SSH agent forwarding for git auth (if available and socket is accessible)
     ...buildSshMountArgs(process.env["SSH_AUTH_SOCK"], ghToken),
     // Block external network access when firewall is enabled
