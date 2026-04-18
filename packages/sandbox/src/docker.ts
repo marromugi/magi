@@ -150,6 +150,7 @@ export async function runSandbox(
   clearTimeout(timeoutId);
 
   const prUrlMatch = output.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
+  const sessionIdMatch = output.match(/\[magi-sandbox\].*?session-id: (\S+)/);
 
   return {
     success: exitCode === 0,
@@ -158,6 +159,7 @@ export async function runSandbox(
     branch: config.branch,
     containerName,
     prUrl: prUrlMatch?.[0],
+    sessionId: sessionIdMatch?.[1] ?? null,
   };
 }
 
