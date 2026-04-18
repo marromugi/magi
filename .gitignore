@@ -35,9 +35,12 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 # claude config
-.claude/settings*.json
+.claude/settings.local.json
 .claude/issues.db
 
 # env files
 .env
 .env.*.local
+
+# Rust build artifacts
+packages/ui/src-tauri/target

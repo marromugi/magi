@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run magi:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r 'if .tool_input.skill == \"issue\" then \"match\" else empty end' | grep -q match && { ISSUES=$(bun run magi issue list 2>/dev/null | jq -r '.[] | \"  - [\\(.id)] \\(.title)\"'); printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"以下が既存のissueです。重複がないか確認してください。詳細は `bun run magi issue show <id>` で確認できます。\\n%s\"}}' \"$ISSUES\"; } || true",
+            "timeout": 30,
+            "statusMessage": "既存issueを確認中..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.ts|*.tsx|*.js|*.jsx) bunx eslint --fix \"$f\" 2>/dev/null; bunx prettier --write \"$f\" 2>/dev/null;; esac; }",
+            "timeout": 30,
+            "statusMessage": "lint & format 実行中...",
+            "shell": "bash"
+          }
+        ]
+      }
+    ]
+  }
+}
