@@ -190,6 +190,33 @@ export function addDependency(
   return getIssue(dbPath, issueId)!;
 }
 
+// ── Dependency Check ──
+
+export type CheckDepsResult =
+  | { blocked: false }
+  | {
+      blocked: true;
+      unresolvedDeps: Array<{
+        id: number;
+        title: string;
+        status: IssueStatus;
+      }>;
+    };
+
+export function checkDeps(dbPath: string, issueId: number): CheckDepsResult {
+  const issue = getIssue(dbPath, issueId);
+  if (!issue) throw new Error(`Issue ${issueId} not found`);
+
+  const depIds = JSON.parse(issue.depends_on) as number[];
+  const unresolved = depIds
+    .map((id) => getIssue(dbPath, id))
+    .filter((dep): dep is Issue => dep !== null && dep.status !== "done")
+    .map(({ id, title, status }) => ({ id, title, status }));
+
+  if (unresolved.length === 0) return { blocked: false };
+  return { blocked: true, unresolvedDeps: unresolved };
+}
+
 /** 依存が全て done かつリモートブランチが削除済みの queue issue を返す */
 export function listReadyIssues(
   dbPath: string,
