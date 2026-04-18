@@ -163,7 +163,12 @@ export function listReadyIssues(
           exec("git", ["fetch", "--prune", "origin"]);
           fetched = true;
         }
-        const output = exec("git", ["ls-remote", "--heads", "origin", dep.branch]);
+        const output = exec("git", [
+          "ls-remote",
+          "--heads",
+          "origin",
+          dep.branch,
+        ]);
         if (output.trim() !== "") return false;
       }
     }
