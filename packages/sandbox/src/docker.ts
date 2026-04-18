@@ -65,7 +65,8 @@ export async function runSandbox(
   if (config.gitUserEmail) env["GIT_USER_EMAIL"] = config.gitUserEmail;
   if (config.oauthToken) env["CLAUDE_CODE_OAUTH_TOKEN"] = config.oauthToken;
   if (config.ghToken) env["GH_TOKEN"] = config.ghToken;
-  if (config.prTitle) env["PR_TITLE"] = config.prTitle;
+  const prTitle = config.prTitle ?? config.commitMessage;
+  if (prTitle) env["PR_TITLE"] = prTitle;
   if (config.prBody) env["PR_BODY"] = config.prBody;
 
   // Build docker run args
@@ -121,12 +122,15 @@ export async function runSandbox(
 
   clearTimeout(timeoutId);
 
+  const prUrlMatch = output.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
+
   return {
     success: exitCode === 0,
     exitCode,
     output,
     branch: config.branch,
     containerName,
+    prUrl: prUrlMatch?.[0],
   };
 }
 
