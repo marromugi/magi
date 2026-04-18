@@ -25,6 +25,14 @@ export interface SandboxConfig {
   containerName?: string;
   /** Timeout in milliseconds (default: 600000 = 10 min) */
   timeout?: number;
+  /** OAuth token for Claude Code (CLAUDE_CODE_OAUTH_TOKEN) */
+  oauthToken?: string;
+  /** GitHub token for git operations (GH_TOKEN) */
+  ghToken?: string;
+  /** Block external network access (--network none) */
+  enableFirewall?: boolean;
+  /** Stream stdout/stderr directly to terminal instead of buffering */
+  stream?: boolean;
 }
 
 export interface SandboxResult {
