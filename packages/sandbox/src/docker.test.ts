@@ -92,6 +92,62 @@ describe("runSandbox env vars", () => {
   });
 });
 
+describe("runSandbox PR creation env vars", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    spy = makeSpawnMock();
+    delete process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+    delete process.env["GH_TOKEN"];
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("passes CREATE_PR=true when createPr is true", async () => {
+    await runSandbox({ ...baseConfig, createPr: true });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["CREATE_PR"]).toBe("true");
+  });
+
+  it("passes CREATE_PR=false by default", async () => {
+    await runSandbox(baseConfig);
+    const env = envArgs(spawnArgs(spy));
+    expect(env["CREATE_PR"]).toBe("false");
+  });
+
+  it("passes CREATE_PR=false when createPr is false", async () => {
+    await runSandbox({ ...baseConfig, createPr: false });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["CREATE_PR"]).toBe("false");
+  });
+
+  it("passes PR_TITLE when prTitle is set", async () => {
+    await runSandbox({ ...baseConfig, prTitle: "My PR Title" });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_TITLE"]).toBe("My PR Title");
+  });
+
+  it("does not pass PR_TITLE when prTitle is not set", async () => {
+    await runSandbox(baseConfig);
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_TITLE"]).toBeUndefined();
+  });
+
+  it("passes PR_BODY when prBody is set", async () => {
+    await runSandbox({ ...baseConfig, prBody: "PR description" });
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_BODY"]).toBe("PR description");
+  });
+
+  it("does not pass PR_BODY when prBody is not set", async () => {
+    await runSandbox(baseConfig);
+    const env = envArgs(spawnArgs(spy));
+    expect(env["PR_BODY"]).toBeUndefined();
+  });
+});
+
 describe("runSandbox mounts", () => {
   let spy: ReturnType<typeof spyOn>;
 
