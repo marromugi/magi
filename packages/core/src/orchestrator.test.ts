@@ -102,7 +102,7 @@ describe("runImplementOrchestrator", () => {
 
     expect(result.success).toBe(true);
     const updated = getIssue(TEST_DB, issue.id);
-    expect(updated?.status).toBe("done");
+    expect(updated?.status).toBe("implemented");
     expect(updated?.branch).toBe("feat/1-test-issue");
   });
 

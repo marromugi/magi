@@ -4,6 +4,8 @@ import { resolve } from "path";
 import {
   type SandboxConfig,
   type SandboxResult,
+  type SandboxHandle,
+  type ExecResult,
   SANDBOX_IMAGE,
   DEFAULT_TIMEOUT,
 } from "./types.js";
@@ -80,22 +82,39 @@ function buildSshMountArgs(
 }
 
 /**
- * Run a sandbox container with the given configuration.
+ * Build common docker run args shared by runSandbox and startSandbox.
  */
-export async function runSandbox(
+function buildCommonRunArgs(
   config: SandboxConfig,
-): Promise<SandboxResult> {
-  const containerName = config.containerName ?? generateContainerName();
-  const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+  containerName: string,
+  ghToken: string,
+): string[] {
+  return [
+    "--name",
+    containerName,
+    // Mount local repo as read-only
+    "-v",
+    `${config.repoPath}:/repo:ro`,
+    // Mount sandbox-specific settings.json (POSIX-compatible hooks)
+    ...buildSettingsMountArgs(config.settingsPath),
+    // SSH agent forwarding for git auth (if available and socket is accessible)
+    ...buildSshMountArgs(process.env["SSH_AUTH_SOCK"], ghToken),
+    // Grant NET_ADMIN so init-firewall.sh can configure iptables rules
+    ...(config.enableFirewall ? ["--cap-add", "NET_ADMIN"] : []),
+  ];
+}
 
-  const oauthToken =
-    config.oauthToken ?? process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";
-  const ghToken = config.ghToken ?? process.env["GH_TOKEN"] ?? "";
-
+/**
+ * Build common environment variables shared by runSandbox and startSandbox.
+ */
+function buildCommonEnv(
+  config: SandboxConfig,
+  oauthToken: string,
+  ghToken: string,
+): Record<string, string> {
   const env: Record<string, string> = {
     BRANCH: config.branch,
     BASE_BRANCH: config.baseBranch ?? "main",
-    PROMPT: config.prompt,
     CLAUDE_CODE_OAUTH_TOKEN: oauthToken,
     GH_TOKEN: ghToken,
     ENABLE_FIREWALL: String(config.enableFirewall ?? false),
@@ -112,29 +131,43 @@ export async function runSandbox(
   if (prTitle) env["PR_TITLE"] = prTitle;
   if (config.prBody) env["PR_BODY"] = config.prBody;
 
+  return env;
+}
+
+/**
+ * Append environment variables as -e flags to args array.
+ */
+function appendEnvArgs(args: string[], env: Record<string, string>): void {
+  for (const [key, value] of Object.entries(env)) {
+    args.push("-e", `${key}=${value}`);
+  }
+}
+
+/**
+ * Run a sandbox container with the given configuration.
+ */
+export async function runSandbox(
+  config: SandboxConfig,
+): Promise<SandboxResult> {
+  const containerName = config.containerName ?? generateContainerName();
+  const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+
+  const oauthToken =
+    config.oauthToken ?? process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";
+  const ghToken = config.ghToken ?? process.env["GH_TOKEN"] ?? "";
+
+  const env = buildCommonEnv(config, oauthToken, ghToken);
+  env["PROMPT"] = config.prompt;
+
   // Build docker run args
   const args: string[] = [
     "docker",
     "run",
     "--rm",
-    "--name",
-    containerName,
-    // Mount local repo as read-only
-    "-v",
-    `${config.repoPath}:/repo:ro`,
-    // Mount sandbox-specific settings.json (POSIX-compatible hooks)
-    ...buildSettingsMountArgs(config.settingsPath),
-    // SSH agent forwarding for git auth (if available and socket is accessible)
-    ...buildSshMountArgs(process.env["SSH_AUTH_SOCK"], ghToken),
-    // Grant NET_ADMIN so init-firewall.sh can configure iptables rules
-    ...(config.enableFirewall ? ["--cap-add", "NET_ADMIN"] : []),
+    ...buildCommonRunArgs(config, containerName, ghToken),
   ];
 
-  // Add environment variables
-  for (const [key, value] of Object.entries(env)) {
-    args.push("-e", `${key}=${value}`);
-  }
-
+  appendEnvArgs(args, env);
   args.push(SANDBOX_IMAGE);
 
   const streaming = config.stream ?? false;
@@ -172,6 +205,109 @@ export async function runSandbox(
     prUrl: prUrlMatch?.[0],
     sessionId: sessionIdMatch?.[1] ?? null,
   };
+}
+
+/**
+ * Start a long-lived sandbox container in detached mode.
+ * The container runs setup only (MODE=setup) and stays alive via sleep infinity.
+ */
+export async function startSandbox(
+  config: SandboxConfig,
+): Promise<SandboxHandle> {
+  const containerName = config.containerName ?? generateContainerName();
+  const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+
+  const oauthToken =
+    config.oauthToken ?? process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";
+  const ghToken = config.ghToken ?? process.env["GH_TOKEN"] ?? "";
+
+  const env = buildCommonEnv(config, oauthToken, ghToken);
+  env["MODE"] = "setup";
+
+  const args: string[] = [
+    "docker",
+    "run",
+    "-d",
+    ...buildCommonRunArgs(config, containerName, ghToken),
+  ];
+
+  appendEnvArgs(args, env);
+  args.push(SANDBOX_IMAGE);
+
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const timeoutId = setTimeout(() => {
+    proc.kill();
+  }, timeout);
+
+  const exitCode = await proc.exited;
+  clearTimeout(timeoutId);
+
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr as ReadableStream).text();
+    throw new Error(`Failed to start sandbox container: ${stderr}`);
+  }
+
+  return {
+    containerName,
+    branch: config.branch,
+    baseBranch: config.baseBranch ?? "main",
+  };
+}
+
+/**
+ * Execute a command inside a running sandbox container.
+ */
+export async function execInSandbox(
+  handle: SandboxHandle,
+  command: string[],
+  opts?: { timeout?: number; stream?: boolean; env?: Record<string, string> },
+): Promise<ExecResult> {
+  const timeout = opts?.timeout ?? DEFAULT_TIMEOUT;
+
+  const args: string[] = ["docker", "exec"];
+
+  if (opts?.env) {
+    for (const [key, value] of Object.entries(opts.env)) {
+      args.push("-e", `${key}=${value}`);
+    }
+  }
+
+  args.push(handle.containerName, ...command);
+
+  const streaming = opts?.stream ?? false;
+  const proc = Bun.spawn(args, {
+    stdout: streaming ? "inherit" : "pipe",
+    stderr: streaming ? "inherit" : "pipe",
+  });
+
+  const timeoutId = setTimeout(() => {
+    proc.kill();
+  }, timeout);
+
+  let stdout = "";
+  let stderr = "";
+  if (!streaming) {
+    [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout as ReadableStream).text(),
+      new Response(proc.stderr as ReadableStream).text(),
+    ]);
+  }
+  const exitCode = await proc.exited;
+  clearTimeout(timeoutId);
+
+  return { exitCode, stdout, stderr };
+}
+
+/**
+ * Stop and remove a sandbox container.
+ */
+export async function stopSandbox(handle: SandboxHandle): Promise<void> {
+  await $`docker stop ${handle.containerName}`.quiet().nothrow();
+  await $`docker rm ${handle.containerName}`.quiet().nothrow();
 }
 
 /**

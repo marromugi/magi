@@ -4,7 +4,7 @@ set -euo pipefail
 # --- Environment Variables ---
 # BRANCH                   : Branch name to create (required)
 # BASE_BRANCH              : Base branch to checkout from (default: main)
-# PROMPT                   : Claude Code prompt to execute (required)
+# PROMPT                   : Claude Code prompt to execute (required unless MODE=setup)
 # COMMIT_MESSAGE           : Commit message (optional)
 # CLAUDE_MODEL             : Model to use (optional)
 # CLAUDE_CODE_OAUTH_TOKEN  : OAuth token for authentication (required)
@@ -15,6 +15,7 @@ set -euo pipefail
 # PR_TITLE                 : Pull request title (optional, defaults to branch name)
 # PR_BODY                  : Pull request body (optional)
 # GH_TOKEN                 : GitHub token required for PR creation
+# MODE                     : "setup" = setup only then sleep; unset = one-shot flow
 #
 # Mount:
 #   -v /path/to/repo:/repo:ro  — ローカルリポジトリを read-only マウント
@@ -30,13 +31,13 @@ log_error() {
 
 BRANCH="${BRANCH:?BRANCH is required}"
 BASE_BRANCH="${BASE_BRANCH:-main}"
-PROMPT="${PROMPT:?PROMPT is required}"
 GIT_USER_NAME="${GIT_USER_NAME:-magi-sandbox}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-magi-sandbox@localhost}"
 ENABLE_FIREWALL="${ENABLE_FIREWALL:-true}"
 CREATE_PR="${CREATE_PR:-false}"
 PR_TITLE="${PR_TITLE:-}"
 PR_BODY="${PR_BODY:-}"
+MODE="${MODE:-}"
 
 # --- Validate ---
 if [ ! -d "/repo/.git" ]; then
@@ -99,6 +100,15 @@ elif [ -f "package.json" ]; then
   log "Installing dependencies with npm..."
   npm install
 fi
+
+# --- MODE=setup: keep container alive ---
+if [ "$MODE" = "setup" ]; then
+  log "Setup complete. Container staying alive (MODE=setup)."
+  exec sleep infinity
+fi
+
+# --- One-shot flow (backward compatible) ---
+PROMPT="${PROMPT:?PROMPT is required}"
 
 # --- Run Claude Code ---
 log "Running Claude Code..."

@@ -1,11 +1,11 @@
 ---
 name: implement
-description: "Issue DB の issue を Docker sandbox で TDD 実装し、PR を作成するスキル。"
+description: "Issue DB の issue を Docker sandbox で TDD 実装するスキル。"
 ---
 
 # Implement Skill
 
-Issue DB に登録された issue を Docker コンテナ (magi-sandbox) 内で TDD 実装し、PR を作成します。
+Issue DB に登録された issue を Docker コンテナ (magi-sandbox) 内で TDD 実装します。
 コンテナ内では `--dangerously-skip-permissions` で完全自律実行されます。
 認証には `CLAUDE_CODE_OAUTH_TOKEN` を使用します（`claude setup-token` で生成）。
 
@@ -135,34 +135,10 @@ EXIT_CODE=${PIPESTATUS[0]}
 
 #### 成功時 (exit 0)
 
-1. ブランチを issue に記録しステータスを `done` に更新
-2. PR を作成
+1. ブランチを issue に記録しステータスを `implemented` に更新
 
 ```bash
-bun run magi issue update <ID> --status done --branch "<branch>"
-```
-
-```bash
-gh pr create \
-  --head "<branch>" \
-  --title "{commit_message}" \
-  --body "$(cat <<'EOF'
-## Summary
-- {title}
-
-## 受け入れ条件
-{acceptance}
-
-## Issue
-Closes issue #<ID> (local)
-
-## Test plan
-- [ ] テストが Green であること
-- [ ] CLAUDE.md の規約に準拠していること
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-EOF
-)"
+bun run magi issue update <ID> --status implemented --branch "<branch>"
 ```
 
 #### 失敗時 (exit 非0)
@@ -204,8 +180,8 @@ wait
 ```
 ## 実装結果
 
-| ID | タイトル | ステータス | ブランチ | PR |
-|----|---------|----------|---------|-----|
-| #1 | 型定義追加 | done | feat/001-types | #42 |
-| #2 | API実装  | done | feat/002-api  | #43 |
+| ID | タイトル | ステータス | ブランチ |
+|----|---------|----------|---------|
+| #1 | 型定義追加 | implemented | feat/001-types |
+| #2 | API実装  | implemented | feat/002-api  |
 ```
