@@ -13,7 +13,8 @@ export type IssueStatus =
   | "blocked"
   | "failed"
   | "implemented"
-  | "in-review";
+  | "in-review"
+  | "skipped";
 
 export interface Issue {
   id: number;
@@ -252,7 +253,10 @@ export function checkDeps(dbPath: string, issueId: number): CheckDepsResult {
   const depIds = JSON.parse(issue.depends_on) as number[];
   const unresolved = depIds
     .map((id) => getIssue(dbPath, id))
-    .filter((dep): dep is Issue => dep !== null && dep.status !== "done")
+    .filter(
+      (dep): dep is Issue =>
+        dep !== null && dep.status !== "done" && dep.status !== "skipped",
+    )
     .map(({ id, title, status }) => ({ id, title, status }));
 
   if (unresolved.length === 0) return { blocked: false };
@@ -271,7 +275,7 @@ export function listReadyIssues(
        AND NOT EXISTS (
          SELECT 1 FROM json_each(i.depends_on) AS d
          JOIN issues dep ON dep.id = CAST(d.value AS INTEGER)
-         WHERE dep.status NOT IN ('done', 'implemented', 'in-review')
+         WHERE dep.status NOT IN ('done', 'implemented', 'in-review', 'skipped')
        )
        ORDER BY i.id`,
     )
