@@ -27,6 +27,11 @@ export interface SandboxConfig {
   timeout?: number;
   /** Stream stdout/stderr directly to terminal instead of buffering */
   stream?: boolean;
+  /** Callback to handle stdout/stderr streams (pipe mode). When set, stream is ignored. */
+  onStreams?: (
+    stdout: ReadableStream<Uint8Array>,
+    stderr: ReadableStream<Uint8Array>,
+  ) => Promise<string>;
   /** Create a GitHub PR after push (default: false) */
   createPr?: boolean;
   /** PR title (used when createPr is true) */

@@ -170,7 +170,8 @@ export async function runSandbox(
   appendEnvArgs(args, env);
   args.push(SANDBOX_IMAGE);
 
-  const streaming = config.stream ?? false;
+  const useCallback = !!config.onStreams;
+  const streaming = !useCallback && (config.stream ?? false);
   const proc = Bun.spawn(args, {
     stdout: streaming ? "inherit" : "pipe",
     stderr: streaming ? "inherit" : "pipe",
@@ -182,7 +183,12 @@ export async function runSandbox(
   }, timeout);
 
   let output = "";
-  if (!streaming) {
+  if (useCallback) {
+    output = await config.onStreams!(
+      proc.stdout as ReadableStream<Uint8Array>,
+      proc.stderr as ReadableStream<Uint8Array>,
+    );
+  } else if (!streaming) {
     const [stdout, stderr] = await Promise.all([
       new Response(proc.stdout as ReadableStream).text(),
       new Response(proc.stderr as ReadableStream).text(),

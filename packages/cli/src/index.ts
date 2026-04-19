@@ -32,6 +32,7 @@ import {
   type IssueType,
   type IssuePriority,
   type IssueStatus,
+  buildPrompt,
 } from "@magi/core";
 import { formatReviewAsMarkdown } from "./review-formatter";
 import { createDaemon } from "./daemon.js";
@@ -385,31 +386,49 @@ async function cmdDaemonStart(args: string[]) {
   const logger = createRichLogger();
   logDaemonStart(intervalSec, concurrency);
 
+  const oauthToken = resolveOauthToken();
+  if (!oauthToken)
+    die(
+      "CLAUDE_CODE_OAUTH_TOKEN is not set. Please set it to your Claude OAuth token.",
+    );
+  const ghToken = await resolveGhToken();
+  const repoPath = getProjectRoot();
+
   const daemon = createDaemon({
     interval: intervalSec * 1000,
     concurrency,
     fetchReadyIssues: () => listReadyIssues(dbPath),
     runIssue: async (issue) => {
       updateIssue(dbPath, issue.id, { status: "active" });
-      const proc = Bun.spawn(
-        ["claude", "--dangerously-skip-permissions", "--print", "/implement"],
-        {
-          cwd: getProjectRoot(),
-          env: { ...process.env, MAGI_ISSUE_ID: String(issue.id) },
-          stdout: "pipe",
-          stderr: "pipe",
+
+      const branch = issue.branch ?? `feat/${issue.id}`;
+      const result = await runSandbox({
+        repoPath,
+        branch,
+        baseBranch: "main",
+        prompt: buildPrompt(issue),
+        commitMessage: issue.commit_message ?? undefined,
+        containerName: `magi-sandbox-issue-${issue.id}`,
+        enableFirewall: true,
+        oauthToken,
+        ghToken,
+        onStreams: async (stdout, stderr) => {
+          const [out, err] = await Promise.all([
+            streamWithPrefix(stdout, issue.id),
+            streamWithPrefix(stderr, issue.id),
+          ]);
+          return out + err;
         },
-      );
-      await Promise.all([
-        streamWithPrefix(proc.stdout as ReadableStream<Uint8Array>, issue.id),
-        streamWithPrefix(proc.stderr as ReadableStream<Uint8Array>, issue.id),
-      ]);
-      const exitCode = await proc.exited;
-      if (exitCode !== 0) {
+      });
+
+      if (!result.success) {
         updateIssue(dbPath, issue.id, { status: "blocked" });
-        throw new Error(`process exited with code ${exitCode}`);
+        throw new Error(`sandbox exited with code ${result.exitCode}`);
       }
-      updateIssue(dbPath, issue.id, { status: "implemented" });
+      updateIssue(dbPath, issue.id, {
+        status: "implemented",
+        branch: result.branch,
+      });
     },
     logger,
   });
