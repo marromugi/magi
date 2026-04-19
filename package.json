@@ -8,7 +8,7 @@
   "scripts": {
     "magi": "bun packages/cli/dist/index.js",
     "dev": "bun run --filter @magi/cli dev",
-    "build": "bun run --filter @magi/core build && bun run --filter @magi/cli build",
+    "build": "bun run --filter @magi/core build && bun run --filter @magi/sandbox build && bun run --filter @magi/cli build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
