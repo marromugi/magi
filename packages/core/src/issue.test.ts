@@ -842,3 +842,87 @@ describe("rebaseIssueBranch", () => {
     expect(pushCalls).toHaveLength(0);
   });
 });
+
+describe("failed status", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-test-"));
+    dbPath = join(tmpDir, "issues.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true });
+  });
+
+  test("updateIssue sets status to failed with failed_reason", () => {
+    const issue = createIssue(dbPath, {
+      title: "test",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, {
+      status: "failed",
+      failed_reason: "sandbox exited with code 1",
+    });
+    const updated = getIssue(dbPath, issue.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.failed_reason).toBe("sandbox exited with code 1");
+  });
+
+  test("failed_reason is cleared when status changes to queue", () => {
+    const issue = createIssue(dbPath, {
+      title: "test",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, {
+      status: "failed",
+      failed_reason: "some error",
+    });
+    updateIssue(dbPath, issue.id, { status: "queue" });
+    const updated = getIssue(dbPath, issue.id);
+    expect(updated?.status).toBe("queue");
+    expect(updated?.failed_reason).toBeNull();
+  });
+
+  test("listReadyIssues excludes failed issues", () => {
+    const issue = createIssue(dbPath, {
+      title: "test",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, {
+      status: "failed",
+      failed_reason: "error",
+    });
+    const noExec = () => "";
+    const ready = listReadyIssues(dbPath, noExec);
+    expect(ready.find((i) => i.id === issue.id)).toBeUndefined();
+  });
+
+  test("listIssues can filter by failed status", () => {
+    createIssue(dbPath, {
+      title: "ok",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const failed = createIssue(dbPath, {
+      title: "broken",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, failed.id, {
+      status: "failed",
+      failed_reason: "timeout",
+    });
+    const result = listIssues(dbPath, { status: ["failed"] });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.title).toBe("broken");
+    expect(result[0]!.failed_reason).toBe("timeout");
+  });
+});

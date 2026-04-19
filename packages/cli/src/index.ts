@@ -422,9 +422,29 @@ async function cmdDaemonStart(args: string[]) {
       });
 
       if (!result.success) {
-        updateIssue(dbPath, issue.id, { status: "blocked" });
+        updateIssue(dbPath, issue.id, {
+          status: "failed",
+          failed_reason: `sandbox exited with code ${result.exitCode}`,
+        });
         throw new Error(`sandbox exited with code ${result.exitCode}`);
       }
+
+      // Verify the branch was actually pushed to remote
+      const verify = Bun.spawnSync(
+        ["git", "ls-remote", "--heads", "origin", branch],
+        { cwd: repoPath },
+      );
+      const pushed = verify.stdout.toString().trim().length > 0;
+      if (!pushed) {
+        updateIssue(dbPath, issue.id, {
+          status: "failed",
+          failed_reason: `sandbox exited 0 but branch ${branch} was not pushed to remote`,
+        });
+        throw new Error(
+          `sandbox exited 0 but branch ${branch} was not pushed to remote`,
+        );
+      }
+
       updateIssue(dbPath, issue.id, {
         status: "implemented",
         branch: result.branch,

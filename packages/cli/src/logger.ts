@@ -24,6 +24,12 @@ function c(s: string, ...styles: string[]): string {
   return styles.join("") + s + style.reset;
 }
 
+// ── Unified output ──
+
+function writeln(line: string): void {
+  process.stdout.write(`${line}\n`);
+}
+
 // ── Formatting helpers ──
 
 function timestamp(): string {
@@ -110,16 +116,16 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
     startTimes,
 
     detect(issue: Issue) {
-      console.log(
+      writeln(
         `${timestamp()} ${c("◆", style.yellow)} ${c("Detected", style.yellow)} ${issueTag(issue)} ${c(issue.title, style.dim)}`,
       );
     },
 
     start(issue: Issue) {
       startTimes.set(issue.id, Date.now());
-      console.log("");
-      console.log(separator(issue));
-      console.log(
+      writeln("");
+      writeln(separator(issue));
+      writeln(
         `${timestamp()} ${c("▶", style.bold, style.blue)} ${c("Starting", style.bold)} ${issueTag(issue)} ${issue.title}`,
       );
     },
@@ -128,23 +134,23 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       const start = startTimes.get(issue.id);
       const dur = start ? c(`(${elapsed(start)})`, style.dim) : "";
       startTimes.delete(issue.id);
-      console.log(
+      writeln(
         `${timestamp()} ${c("✓", style.bold, style.green)} ${c("Completed", style.bold, style.green)} ${issueTag(issue)} ${dur}`,
       );
-      console.log(separator(issue));
-      console.log("");
+      writeln(separator(issue));
+      writeln("");
     },
 
     fail(issue: Issue, error: unknown) {
       const start = startTimes.get(issue.id);
       const dur = start ? c(`(${elapsed(start)})`, style.dim) : "";
       startTimes.delete(issue.id);
-      console.log(
+      writeln(
         `${timestamp()} ${c("✗", style.bold, style.red)} ${c("Failed", style.bold, style.red)} ${issueTag(issue)} ${dur}`,
       );
-      console.error(`  ${c(String(error), style.red)}`);
-      console.log(separator(issue));
-      console.log("");
+      writeln(`  ${c(String(error), style.red)}`);
+      writeln(separator(issue));
+      writeln("");
     },
   };
 }
@@ -152,38 +158,38 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
 // ── Daemon lifecycle banners ──
 
 export function logDaemonStart(interval: number, concurrency: number): void {
-  console.log("");
-  console.log(
+  writeln("");
+  writeln(
     c("  ╔══════════════════════════════════════╗", style.bold, style.magenta),
   );
-  console.log(
+  writeln(
     c("  ║         MAGI Daemon Started          ║", style.bold, style.magenta),
   );
-  console.log(
+  writeln(
     c("  ╚══════════════════════════════════════╝", style.bold, style.magenta),
   );
-  console.log("");
-  console.log(
+  writeln("");
+  writeln(
     `  ${c("interval:", style.dim)} ${c(`${interval}s`, style.white)}   ${c("concurrency:", style.dim)} ${c(String(concurrency), style.white)}`,
   );
-  console.log("");
+  writeln("");
 }
 
 export function logDaemonReady(): void {
-  console.log(
+  writeln(
     `${timestamp()} ${c("●", style.bold, style.green)} ${c("Daemon ready — polling for issues", style.green)}`,
   );
 }
 
 export function logDaemonShutdown(): void {
-  console.log("");
-  console.log(
+  writeln("");
+  writeln(
     `${timestamp()} ${c("■", style.yellow)} ${c("Shutting down...", style.yellow)}`,
   );
 }
 
 export function logDaemonStopped(): void {
-  console.log(
+  writeln(
     `${timestamp()} ${c("●", style.dim)} ${c("Daemon stopped", style.dim)}`,
   );
 }

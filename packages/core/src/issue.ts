@@ -11,6 +11,7 @@ export type IssueStatus =
   | "active"
   | "done"
   | "blocked"
+  | "failed"
   | "implemented"
   | "in-review";
 
@@ -28,6 +29,7 @@ export interface Issue {
   commit_message: string | null;
   worktree_path: string | null;
   session_id: string | null;
+  failed_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +51,7 @@ export interface UpdateIssueInput {
   branch?: string;
   worktree_path?: string;
   session_id?: string | null;
+  failed_reason?: string | null;
 }
 
 // ── Helpers ──
@@ -157,6 +160,19 @@ export function updateIssue(
   if (input.session_id !== undefined) {
     sets.push("session_id = ?");
     values.push(input.session_id);
+  }
+  if (input.failed_reason !== undefined) {
+    sets.push("failed_reason = ?");
+    values.push(input.failed_reason);
+  }
+  // Clear failed_reason when moving away from failed status
+  if (
+    input.status !== undefined &&
+    input.status !== "failed" &&
+    input.failed_reason === undefined
+  ) {
+    sets.push("failed_reason = ?");
+    values.push(null);
   }
 
   if (sets.length === 0) return getIssue(dbPath, id);
