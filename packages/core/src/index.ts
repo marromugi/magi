@@ -59,6 +59,8 @@ export {
   sendWebhook,
 } from "./webhook.js";
 
+export { listPRQueue } from "./pr.js";
+
 export {
   type ReviewSchedule,
   type CreateReviewScheduleInput,
