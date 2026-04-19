@@ -42,6 +42,16 @@ describe("listPRQueue", () => {
     expect(listPRQueue(dbPath)).toEqual([]);
   });
 
+  test("excludes skipped issues", () => {
+    const issue = createIssue(dbPath, {
+      title: "A",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, { status: "skipped" });
+    expect(listPRQueue(dbPath)).toEqual([]);
+  });
+
   test("returns single implemented issue", () => {
     const issue = createIssue(dbPath, {
       title: "A",

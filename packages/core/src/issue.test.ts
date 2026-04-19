@@ -926,3 +926,79 @@ describe("failed status", () => {
     expect(result[0]!.failed_reason).toBe("timeout");
   });
 });
+
+describe("skipped status", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-test-"));
+    dbPath = join(tmpDir, "issues.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true });
+  });
+
+  test("updateIssue can set status to skipped", () => {
+    const issue = createIssue(dbPath, {
+      title: "test",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, { status: "skipped" });
+    const updated = getIssue(dbPath, issue.id);
+    expect(updated?.status).toBe("skipped");
+  });
+
+  test("listReadyIssues excludes skipped issues", () => {
+    const issue = createIssue(dbPath, {
+      title: "test",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, issue.id, { status: "skipped" });
+    const noExec = () => "";
+    const ready = listReadyIssues(dbPath, noExec);
+    expect(ready.find((i) => i.id === issue.id)).toBeUndefined();
+  });
+
+  test("listReadyIssues returns issue when dep is skipped and has no branch", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "skipped" });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    const exec = mock(() => "");
+    const ready = listReadyIssues(dbPath, exec);
+    expect(ready.map((i) => i.id)).toContain(issue.id);
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  test("checkDeps treats skipped dep as resolved", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "skipped" });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    const result = checkDeps(dbPath, issue.id);
+    expect(result.blocked).toBe(false);
+  });
+});
