@@ -627,6 +627,7 @@ async function main() {
       break;
     case "pr":
       if (subcommand === "start") await cmdPrStart(rest);
+      else if (subcommand === "list") cmdPrList();
       else die(`unknown pr command: ${subcommand}`);
       break;
     case "daemon":
@@ -647,10 +648,6 @@ async function main() {
         default:
           die(`unknown sandbox command: ${subcommand}`);
       }
-      break;
-    case "pr":
-      if (subcommand === "list") cmdPrList();
-      else die(`unknown pr command: ${subcommand}`);
       break;
     case "check-interrupt":
       await cmdCheckInterrupt([subcommand ?? "", ...rest]);
