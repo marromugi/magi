@@ -286,6 +286,52 @@ describe("runSandbox mounts", () => {
   });
 });
 
+describe("runSandbox firewall args", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    spy = makeSpawnMock();
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("adds --cap-add NET_ADMIN when enableFirewall is true", async () => {
+    await runSandbox({ ...baseConfig, enableFirewall: true });
+    const args = spawnArgs(spy);
+    const capIdx = args.indexOf("--cap-add");
+    expect(capIdx).toBeGreaterThan(-1);
+    expect(args[capIdx + 1]).toBe("NET_ADMIN");
+  });
+
+  it("does not add --network none when enableFirewall is true", async () => {
+    await runSandbox({ ...baseConfig, enableFirewall: true });
+    const args = spawnArgs(spy);
+    expect(args).not.toContain("--network");
+    expect(args).not.toContain("none");
+  });
+
+  it("does not add --cap-add NET_ADMIN when enableFirewall is false", async () => {
+    await runSandbox({ ...baseConfig, enableFirewall: false });
+    const args = spawnArgs(spy);
+    expect(args).not.toContain("--cap-add");
+  });
+
+  it("does not add --network none when enableFirewall is false", async () => {
+    await runSandbox({ ...baseConfig, enableFirewall: false });
+    const args = spawnArgs(spy);
+    expect(args).not.toContain("--network");
+  });
+
+  it("does not add firewall args when enableFirewall is not set", async () => {
+    await runSandbox(baseConfig);
+    const args = spawnArgs(spy);
+    expect(args).not.toContain("--cap-add");
+    expect(args).not.toContain("--network");
+  });
+});
+
 describe("runSandbox settings.json mount", () => {
   let spawnSpy: ReturnType<typeof spyOn>;
   let existsSpy: ReturnType<typeof spyOn>;
