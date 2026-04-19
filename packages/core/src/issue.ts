@@ -6,7 +6,13 @@ import { sendWebhook } from "./webhook.js";
 
 export type IssueType = "feat" | "fix" | "refactor" | "chore" | "test" | "docs";
 export type IssuePriority = "normal" | "interrupt";
-export type IssueStatus = "queue" | "active" | "done" | "blocked";
+export type IssueStatus =
+  | "queue"
+  | "active"
+  | "done"
+  | "blocked"
+  | "implemented"
+  | "in-review";
 
 export interface Issue {
   id: number;
@@ -249,7 +255,7 @@ export function listReadyIssues(
        AND NOT EXISTS (
          SELECT 1 FROM json_each(i.depends_on) AS d
          JOIN issues dep ON dep.id = CAST(d.value AS INTEGER)
-         WHERE dep.status != 'done'
+         WHERE dep.status NOT IN ('done', 'implemented', 'in-review')
        )
        ORDER BY i.id`,
     )

@@ -66,6 +66,40 @@ const MIGRATIONS = [
       ALTER TABLE issues ADD COLUMN session_id TEXT;
     `,
   },
+  {
+    version: 5,
+    name: "add-implemented-in-review-status",
+    up: `
+      CREATE TABLE issues_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('feat', 'fix', 'refactor', 'chore', 'test', 'docs')),
+        priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal', 'interrupt')),
+        status TEXT NOT NULL DEFAULT 'queue' CHECK(status IN ('queue', 'active', 'done', 'blocked', 'implemented', 'in-review')),
+        depends_on TEXT NOT NULL DEFAULT '[]',
+        affects TEXT NOT NULL DEFAULT '[]',
+        acceptance TEXT NOT NULL,
+        context TEXT,
+        branch TEXT,
+        commit_message TEXT,
+        worktree_path TEXT,
+        session_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+
+      INSERT INTO issues_new SELECT * FROM issues;
+      DROP TABLE issues;
+      ALTER TABLE issues_new RENAME TO issues;
+
+      DROP TRIGGER IF EXISTS issues_updated_at;
+      CREATE TRIGGER IF NOT EXISTS issues_updated_at
+      AFTER UPDATE ON issues
+      BEGIN
+        UPDATE issues SET updated_at = datetime('now', 'localtime') WHERE id = NEW.id;
+      END;
+    `,
+  },
 ] as const;
 
 let _db: Database | null = null;
