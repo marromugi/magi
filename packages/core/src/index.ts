@@ -59,7 +59,14 @@ export {
   sendWebhook,
 } from "./webhook.js";
 
-export { listPRQueue } from "./pr.js";
+export {
+  listPRQueue,
+  createIssuePR,
+  mergeIssuePR,
+  isPRMerged,
+  processPRQueue,
+  type ProcessPRQueueDeps,
+} from "./pr.js";
 
 export {
   type ReviewSchedule,

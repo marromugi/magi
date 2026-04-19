@@ -28,6 +28,7 @@ import {
   generateWorkflow,
   listPRQueue,
   closeDb,
+  processPRQueue,
   type IssueType,
   type IssuePriority,
   type IssueStatus,
@@ -422,6 +423,45 @@ async function cmdDaemonStart(args: string[]) {
   });
 }
 
+async function cmdPrStart(args: string[]) {
+  const flags = parseFlags(args);
+  const autoMerge = flags["auto-merge"] === "true";
+  const intervalSec = Number(flags.interval ?? "30");
+  const once = flags.once === "true";
+
+  if (isNaN(intervalSec) || intervalSec <= 0)
+    die("--interval must be a positive number");
+
+  const dbPath = getDbPath();
+  migrate(dbPath);
+
+  const ts = () => new Date().toISOString();
+  console.log(
+    `[${ts()}] pr daemon starting (auto-merge=${autoMerge}, interval=${intervalSec}s, once=${once})`,
+  );
+
+  await processPRQueue({ dbPath, autoMerge });
+
+  if (once) {
+    console.log(`[${ts()}] done`);
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timer = setInterval(async () => {
+      await processPRQueue({ dbPath, autoMerge });
+    }, intervalSec * 1000);
+
+    process.on("SIGINT", () => {
+      console.log(`\n[${ts()}] shutting down...`);
+      clearInterval(timer);
+      resolve();
+    });
+  });
+
+  console.log(`[${ts()}] stopped`);
+}
+
 async function cmdSandboxRun(args: string[]) {
   const flags = parseFlags(args);
   if (!flags.branch) die("--branch is required");
@@ -520,6 +560,7 @@ Commands:
   review list                List review schedules
   review remove <id>         Remove a review schedule
   review run [<id>]          Run review (collect commits since last review)
+  pr start [options]         Start PR daemon (--auto-merge, --interval <s>, --once)
   daemon start [options]     Start daemon (--interval <s>, --concurrency <n>)
   check-interrupt <file>     Check if file is blocked by an interrupt issue
   check-deps [<issueId>]    Check if issue has unresolved dependencies (PreToolUse hook)
@@ -583,6 +624,10 @@ async function main() {
         default:
           die(`unknown review command: ${subcommand}`);
       }
+      break;
+    case "pr":
+      if (subcommand === "start") await cmdPrStart(rest);
+      else die(`unknown pr command: ${subcommand}`);
       break;
     case "daemon":
       if (subcommand === "start") await cmdDaemonStart(rest);
