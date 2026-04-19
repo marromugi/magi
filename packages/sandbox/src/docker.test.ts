@@ -579,6 +579,98 @@ describe("execInSandbox", () => {
   });
 });
 
+// ── waitForSetup tests ──
+
+describe("waitForSetup", () => {
+  let shellSpy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    shellSpy?.mockRestore();
+  });
+
+  it("resolves when setup-done marker exists", async () => {
+    const { waitForSetup } = await import("./docker.js");
+    // 1st call: docker exec test -f → success
+    shellSpy = spyOn(Bun, "spawn").mockImplementation((args) => {
+      const cmd = (args as string[]).join(" ");
+      if (cmd.includes("test -f")) {
+        return {
+          stdout: null,
+          stderr: null,
+          exited: Promise.resolve(0),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      throw new Error(`Unexpected spawn: ${cmd}`);
+    });
+    await expect(waitForSetup("test-ctr", 5000, 100)).resolves.toBeUndefined();
+  });
+
+  it("throws when container stops running during setup", async () => {
+    const { waitForSetup } = await import("./docker.js");
+    shellSpy = spyOn(Bun, "spawn").mockImplementation((args) => {
+      const cmd = (args as string[]).join(" ");
+      if (cmd.includes("test -f")) {
+        // marker not found
+        return {
+          stdout: null,
+          stderr: null,
+          exited: Promise.resolve(1),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      if (cmd.includes("inspect")) {
+        // container not running
+        return {
+          stdout: new Response("false\n").body as ReadableStream,
+          stderr: new Response("").body as ReadableStream,
+          exited: Promise.resolve(0),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      if (cmd.includes("docker logs")) {
+        return {
+          stdout: new Response("setup log output").body as ReadableStream,
+          stderr: new Response("setup error").body as ReadableStream,
+          exited: Promise.resolve(0),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      throw new Error(`Unexpected spawn: ${cmd}`);
+    });
+    await expect(waitForSetup("test-ctr", 5000, 100)).rejects.toThrow(
+      /crashed during setup/,
+    );
+  });
+
+  it("throws on timeout when container stays running but never becomes ready", async () => {
+    const { waitForSetup } = await import("./docker.js");
+    shellSpy = spyOn(Bun, "spawn").mockImplementation((args) => {
+      const cmd = (args as string[]).join(" ");
+      if (cmd.includes("test -f")) {
+        return {
+          stdout: null,
+          stderr: null,
+          exited: Promise.resolve(1),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      if (cmd.includes("inspect")) {
+        return {
+          stdout: new Response("true\n").body as ReadableStream,
+          stderr: new Response("").body as ReadableStream,
+          exited: Promise.resolve(0),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      throw new Error(`Unexpected spawn: ${cmd}`);
+    });
+    await expect(waitForSetup("test-ctr", 300, 100)).rejects.toThrow(
+      /timed out/,
+    );
+  });
+});
+
 // ── stopSandbox tests ──
 
 describe("stopSandbox", () => {

@@ -257,11 +257,61 @@ export async function startSandbox(
     throw new Error(`Failed to start sandbox container: ${stderr}`);
   }
 
+  // Wait for entrypoint setup to complete before returning
+  await waitForSetup(containerName, timeout);
+
   return {
     containerName,
     branch: config.branch,
     baseBranch: config.baseBranch ?? "main",
   };
+}
+
+/**
+ * Wait for the sandbox container's entrypoint setup to complete.
+ * Polls for /tmp/setup-done marker file; throws if container crashes or times out.
+ */
+export async function waitForSetup(
+  containerName: string,
+  timeout = 120_000,
+  interval = 500,
+): Promise<void> {
+  for (let elapsed = 0; elapsed < timeout; elapsed += interval) {
+    // Check if setup-done marker exists
+    const check = Bun.spawn(
+      ["docker", "exec", containerName, "test", "-f", "/tmp/setup-done"],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    if ((await check.exited) === 0) return;
+
+    // Check if container is still running
+    const inspect = Bun.spawn(
+      ["docker", "inspect", "-f", "{{.State.Running}}", containerName],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    await inspect.exited;
+    const running = (
+      await new Response(inspect.stdout as ReadableStream).text()
+    ).trim();
+
+    if (running !== "true") {
+      const logs = Bun.spawn(["docker", "logs", containerName], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await logs.exited;
+      const logOut = await new Response(logs.stdout as ReadableStream).text();
+      const logErr = await new Response(logs.stderr as ReadableStream).text();
+      throw new Error(
+        `Sandbox container crashed during setup:\n${logOut}${logErr}`,
+      );
+    }
+
+    await Bun.sleep(interval);
+  }
+  throw new Error(
+    `Sandbox setup timed out after ${timeout}ms for container ${containerName}`,
+  );
 }
 
 /**

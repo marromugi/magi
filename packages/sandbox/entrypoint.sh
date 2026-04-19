@@ -104,6 +104,7 @@ fi
 # --- MODE=setup: keep container alive ---
 if [ "$MODE" = "setup" ]; then
   log "Setup complete. Container staying alive (MODE=setup)."
+  touch /tmp/setup-done
   exec sleep infinity
 fi
 
