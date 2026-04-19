@@ -156,6 +156,44 @@ describe("listReadyIssues", () => {
     });
   });
 
+  test("returns issue when dep is implemented and has no branch", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "implemented" });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    const exec = mock(() => "");
+    const ready = listReadyIssues(dbPath, exec);
+    expect(ready.map((i) => i.id)).toContain(issue.id);
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  test("returns issue when dep is in-review and has no branch", () => {
+    const dep = createIssue(dbPath, {
+      title: "dep",
+      type: "feat",
+      acceptance: "ok",
+    });
+    updateIssue(dbPath, dep.id, { status: "in-review" });
+    const issue = createIssue(dbPath, {
+      title: "main",
+      type: "feat",
+      acceptance: "ok",
+      depends_on: [dep.id],
+    });
+    const exec = mock(() => "");
+    const ready = listReadyIssues(dbPath, exec);
+    expect(ready.map((i) => i.id)).toContain(issue.id);
+    expect(exec).not.toHaveBeenCalled();
+  });
+
   test("runs git fetch only once even with multiple branched deps", () => {
     const dep1 = createIssue(dbPath, {
       title: "dep1",
