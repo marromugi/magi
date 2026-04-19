@@ -35,6 +35,14 @@ import {
 } from "@magi/core";
 import { formatReviewAsMarkdown } from "./review-formatter";
 import { createDaemon } from "./daemon.js";
+import {
+  createRichLogger,
+  streamWithPrefix,
+  logDaemonStart,
+  logDaemonReady,
+  logDaemonShutdown,
+  logDaemonStopped,
+} from "./logger.js";
 
 // ── Helpers ──
 
@@ -374,10 +382,8 @@ async function cmdDaemonStart(args: string[]) {
   const dbPath = getDbPath();
   migrate(dbPath);
 
-  const ts = () => new Date().toISOString();
-  console.log(
-    `[${ts()}] daemon starting (interval=${intervalSec}s, concurrency=${concurrency})`,
-  );
+  const logger = createRichLogger();
+  logDaemonStart(intervalSec, concurrency);
 
   const daemon = createDaemon({
     interval: intervalSec * 1000,
@@ -390,10 +396,14 @@ async function cmdDaemonStart(args: string[]) {
         {
           cwd: getProjectRoot(),
           env: { ...process.env, MAGI_ISSUE_ID: String(issue.id) },
-          stdout: "inherit",
-          stderr: "inherit",
+          stdout: "pipe",
+          stderr: "pipe",
         },
       );
+      await Promise.all([
+        streamWithPrefix(proc.stdout as ReadableStream<Uint8Array>, issue.id),
+        streamWithPrefix(proc.stderr as ReadableStream<Uint8Array>, issue.id),
+      ]);
       const exitCode = await proc.exited;
       if (exitCode !== 0) {
         updateIssue(dbPath, issue.id, { status: "blocked" });
@@ -401,23 +411,17 @@ async function cmdDaemonStart(args: string[]) {
       }
       updateIssue(dbPath, issue.id, { status: "implemented" });
     },
-    logger: {
-      detect: (i) => console.log(`[${ts()}] detected  #${i.id} ${i.title}`),
-      start: (i) => console.log(`[${ts()}] starting  #${i.id} ${i.title}`),
-      complete: (i) => console.log(`[${ts()}] completed #${i.id} ${i.title}`),
-      fail: (i, err) =>
-        console.error(`[${ts()}] failed    #${i.id} ${i.title}: ${err}`),
-    },
+    logger,
   });
 
   daemon.start();
-  console.log(`[${ts()}] daemon ready`);
+  logDaemonReady();
 
   await new Promise<void>((resolve) => {
     process.on("SIGINT", async () => {
-      console.log(`\n[${ts()}] shutting down...`);
+      logDaemonShutdown();
       await daemon.stop();
-      console.log(`[${ts()}] stopped`);
+      logDaemonStopped();
       resolve();
     });
   });
