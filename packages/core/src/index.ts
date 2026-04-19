@@ -68,6 +68,8 @@ export {
   type ProcessPRQueueDeps,
 } from "./pr.js";
 
+export { shouldRun, nextCronTime } from "./cron.js";
+
 export {
   type ReviewSchedule,
   type CreateReviewScheduleInput,
