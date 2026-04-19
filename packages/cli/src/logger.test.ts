@@ -23,6 +23,8 @@ function makeIssue(id: number, overrides?: Partial<Issue>): Issue {
     branch: `feat/${id}-test`,
     commit_message: null,
     worktree_path: null,
+    session_id: null,
+    failed_reason: null,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     ...overrides,
@@ -30,26 +32,27 @@ function makeIssue(id: number, overrides?: Partial<Issue>): Issue {
 }
 
 describe("createRichLogger", () => {
-  let logSpy: ReturnType<typeof spyOn>;
-  let errorSpy: ReturnType<typeof spyOn>;
+  let writeSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    logSpy = spyOn(console, "log").mockImplementation(() => {});
-    errorSpy = spyOn(console, "error").mockImplementation(() => {});
+    writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
   });
 
   afterEach(() => {
-    logSpy.mockRestore();
-    errorSpy.mockRestore();
+    writeSpy.mockRestore();
   });
+
+  function allOutput(): string {
+    return writeSpy.mock.calls.map((c) => c[0] as string).join("");
+  }
 
   it("detect outputs issue id and title", () => {
     const logger = createRichLogger();
     const issue = makeIssue(42);
     logger.detect(issue);
 
-    expect(logSpy).toHaveBeenCalledTimes(1);
-    const output = logSpy.mock.calls[0]![0] as string;
+    expect(writeSpy).toHaveBeenCalled();
+    const output = allOutput();
     expect(output).toContain("#42");
     expect(output).toContain("Detected");
     expect(output).toContain("Issue 42");
@@ -60,13 +63,11 @@ describe("createRichLogger", () => {
     const issue = makeIssue(7);
     logger.start(issue);
 
-    // empty line, separator, start line
-    expect(logSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
-    const allOutput = logSpy.mock.calls.map((c) => c[0] as string).join("\n");
-    expect(allOutput).toContain("#7");
-    expect(allOutput).toContain("Starting");
-    expect(allOutput).toContain("Issue 7");
-    expect(allOutput).toContain("━");
+    const output = allOutput();
+    expect(output).toContain("#7");
+    expect(output).toContain("Starting");
+    expect(output).toContain("Issue 7");
+    expect(output).toContain("━");
   });
 
   it("start records startTime for elapsed calculation", () => {
@@ -81,35 +82,31 @@ describe("createRichLogger", () => {
     const logger = createRichLogger();
     const issue = makeIssue(3);
     logger.start(issue);
-    logSpy.mockClear();
+    writeSpy.mockClear();
 
     logger.complete(issue);
 
     expect(logger.startTimes.has(3)).toBe(false);
-    const allOutput = logSpy.mock.calls.map((c) => c[0] as string).join("\n");
-    expect(allOutput).toContain("Completed");
-    expect(allOutput).toContain("#3");
-    expect(allOutput).toContain("✓");
+    const output = allOutput();
+    expect(output).toContain("Completed");
+    expect(output).toContain("#3");
+    expect(output).toContain("✓");
   });
 
   it("fail shows error message and clears startTime", () => {
     const logger = createRichLogger();
     const issue = makeIssue(5);
     logger.start(issue);
-    logSpy.mockClear();
+    writeSpy.mockClear();
 
     logger.fail(issue, new Error("sandbox crashed"));
 
     expect(logger.startTimes.has(5)).toBe(false);
-    const logOutput = logSpy.mock.calls.map((c) => c[0] as string).join("\n");
-    expect(logOutput).toContain("Failed");
-    expect(logOutput).toContain("#5");
-    expect(logOutput).toContain("✗");
-
-    const errorOutput = errorSpy.mock.calls
-      .map((c) => c[0] as string)
-      .join("\n");
-    expect(errorOutput).toContain("sandbox crashed");
+    const output = allOutput();
+    expect(output).toContain("Failed");
+    expect(output).toContain("#5");
+    expect(output).toContain("✗");
+    expect(output).toContain("sandbox crashed");
   });
 });
 
@@ -166,7 +163,7 @@ describe("streamWithPrefix", () => {
 
     expect(result).toBe("hello\nworld\n");
     // "hello" and "world" should each be written as complete lines
-    const lines = writeSpy.mock.calls.map((c) => c[0] as string);
+    const lines = writeSpy.mock.calls.map((c: unknown[]) => c[0] as string);
     expect(lines.some((l) => l.includes("hello"))).toBe(true);
     expect(lines.some((l) => l.includes("world"))).toBe(true);
   });
@@ -190,43 +187,47 @@ describe("streamWithPrefix", () => {
 });
 
 describe("lifecycle banners", () => {
-  let logSpy: ReturnType<typeof spyOn>;
+  let writeSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    logSpy = spyOn(console, "log").mockImplementation(() => {});
+    writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
   });
 
   afterEach(() => {
-    logSpy.mockRestore();
+    writeSpy.mockRestore();
   });
+
+  function allOutput(): string {
+    return writeSpy.mock.calls.map((c: unknown[]) => c[0] as string).join("");
+  }
 
   it("logDaemonStart shows interval and concurrency", () => {
     logDaemonStart(30, 2);
 
-    const allOutput = logSpy.mock.calls.map((c) => c[0] as string).join("\n");
-    expect(allOutput).toContain("MAGI Daemon Started");
-    expect(allOutput).toContain("30s");
-    expect(allOutput).toContain("2");
+    const output = allOutput();
+    expect(output).toContain("MAGI Daemon Started");
+    expect(output).toContain("30s");
+    expect(output).toContain("2");
   });
 
   it("logDaemonReady shows ready message", () => {
     logDaemonReady();
 
-    const output = logSpy.mock.calls[0]![0] as string;
+    const output = allOutput();
     expect(output).toContain("ready");
   });
 
   it("logDaemonShutdown shows shutdown message", () => {
     logDaemonShutdown();
 
-    const allOutput = logSpy.mock.calls.map((c) => c[0] as string).join("\n");
-    expect(allOutput).toContain("Shutting down");
+    const output = allOutput();
+    expect(output).toContain("Shutting down");
   });
 
   it("logDaemonStopped shows stopped message", () => {
     logDaemonStopped();
 
-    const output = logSpy.mock.calls[0]![0] as string;
+    const output = allOutput();
     expect(output).toContain("stopped");
   });
 });

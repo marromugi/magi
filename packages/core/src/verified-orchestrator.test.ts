@@ -167,10 +167,10 @@ describe("runVerifiedOrchestrator", () => {
 
     expect(result.success).toBe(false);
     const updated = getIssue(TEST_DB, issue.id);
-    expect(updated?.status).toBe("blocked");
+    expect(updated?.status).toBe("failed");
   });
 
-  it("implementation itself fails (non-zero exit) -> blocked immediately", async () => {
+  it("implementation itself fails (non-zero exit) -> failed immediately", async () => {
     const issue = createIssue(TEST_DB, {
       title: "Test issue",
       type: "feat",
@@ -184,7 +184,7 @@ describe("runVerifiedOrchestrator", () => {
 
     expect(result.success).toBe(false);
     const updated = getIssue(TEST_DB, issue.id);
-    expect(updated?.status).toBe("blocked");
+    expect(updated?.status).toBe("failed");
     // Should not have any verification calls
     const verifyCalls = execCalls.filter((c) =>
       c.command.includes("--json-schema"),
