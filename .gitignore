@@ -37,6 +37,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # claude config
 .claude/settings.local.json
 .claude/issues.db
+.claude/worktrees
 
 # env files
 .env
