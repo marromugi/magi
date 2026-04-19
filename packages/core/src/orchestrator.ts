@@ -100,7 +100,7 @@ export async function runImplementOrchestrator(
 
   if (result.success) {
     updateIssue(config.dbPath, issue.id, {
-      status: "done",
+      status: "implemented",
       branch: result.branch,
     });
   } else {
@@ -234,7 +234,7 @@ export async function runVerifiedOrchestrator(
       // Commit and push
       await config.executor.exec(handle, ["/magi/scripts/commit-push.sh"]);
       updateIssue(config.dbPath, issue.id, {
-        status: "done",
+        status: "implemented",
         branch,
       });
     } else {
