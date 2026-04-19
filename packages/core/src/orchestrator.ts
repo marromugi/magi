@@ -140,6 +140,25 @@ export type SandboxExecutor = {
   stop: (handle: SandboxHandle) => Promise<void>;
 };
 
+export interface OrchestratorLogger {
+  onAttemptStart?: (attempt: number, maxAttempts: number) => void;
+  onImplComplete?: (
+    attempt: number,
+    maxAttempts: number,
+    exitCode: number,
+  ) => void;
+  onVerifyJudgment?: (
+    attempt: number,
+    maxAttempts: number,
+    judgment: VerifyJudgment,
+  ) => void;
+  onRetry?: (
+    attempt: number,
+    maxAttempts: number,
+    judgment: VerifyJudgment,
+  ) => void;
+}
+
 export interface VerifiedOrchestratorConfig {
   dbPath: string;
   repoPath: string;
@@ -147,6 +166,7 @@ export interface VerifiedOrchestratorConfig {
   maxRetries?: number; // default: 2
   model?: string;
   executor: SandboxExecutor;
+  logger?: OrchestratorLogger;
 }
 
 export async function runVerifiedOrchestrator(
@@ -167,6 +187,7 @@ export async function runVerifiedOrchestrator(
     prompt: "", // prompt is not used by startSandbox
   });
 
+  const { logger } = config;
   let success = false;
   let output = "";
 
@@ -174,6 +195,8 @@ export async function runVerifiedOrchestrator(
     let currentPrompt = buildPrompt(issue);
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      logger?.onAttemptStart?.(attempt, maxAttempts);
+
       // Run implementation
       const implCmd = [
         "claude",
@@ -186,8 +209,9 @@ export async function runVerifiedOrchestrator(
       const implResult = await config.executor.exec(handle, implCmd);
       output += implResult.stdout + implResult.stderr;
 
+      logger?.onImplComplete?.(attempt, maxAttempts, implResult.exitCode);
+
       if (implResult.exitCode !== 0) {
-        // Implementation itself failed — blocked immediately
         break;
       }
 
@@ -211,13 +235,14 @@ export async function runVerifiedOrchestrator(
       try {
         judgment = JSON.parse(verifyResult.stdout) as VerifyJudgment;
       } catch {
-        // Failed to parse verification result — treat as failure
         judgment = {
           pass: false,
           summary: "Failed to parse verification result",
           failures: [verifyResult.stdout],
         };
       }
+
+      logger?.onVerifyJudgment?.(attempt, maxAttempts, judgment);
 
       if (judgment.pass) {
         success = true;
@@ -226,6 +251,7 @@ export async function runVerifiedOrchestrator(
 
       // If not the last attempt, rebuild prompt with feedback
       if (attempt < maxAttempts) {
+        logger?.onRetry?.(attempt, maxAttempts, judgment);
         currentPrompt = buildReimplementPrompt(buildPrompt(issue), judgment);
       }
     }
