@@ -33,6 +33,8 @@ export interface SandboxConfig {
   prTitle?: string;
   /** PR body (used when createPr is true) */
   prBody?: string;
+  /** Path to settings.json to inject into the container (default: package built-in) */
+  settingsPath?: string;
 }
 
 export interface SandboxResult {
