@@ -399,7 +399,7 @@ async function cmdDaemonStart(args: string[]) {
         updateIssue(dbPath, issue.id, { status: "blocked" });
         throw new Error(`process exited with code ${exitCode}`);
       }
-      updateIssue(dbPath, issue.id, { status: "done" });
+      updateIssue(dbPath, issue.id, { status: "implemented" });
     },
     logger: {
       detect: (i) => console.log(`[${ts()}] detected  #${i.id} ${i.title}`),
