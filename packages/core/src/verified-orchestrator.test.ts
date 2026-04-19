@@ -5,6 +5,7 @@ import {
   runVerifiedOrchestrator,
   type VerifiedOrchestratorConfig,
   type SandboxExecutor,
+  type OrchestratorLogger,
 } from "./orchestrator.js";
 import type { VerifyJudgment } from "./verification.js";
 
@@ -109,7 +110,7 @@ describe("runVerifiedOrchestrator", () => {
 
     expect(result.success).toBe(true);
     const updated = getIssue(TEST_DB, issue.id);
-    expect(updated?.status).toBe("done");
+    expect(updated?.status).toBe("implemented");
   });
 
   it("fails first verification, passes on retry -> success after 2 implementations", async () => {
@@ -285,6 +286,204 @@ describe("runVerifiedOrchestrator", () => {
       c.command.includes("/magi/scripts/commit-push.sh"),
     );
     expect(commitCalls.length).toBe(0);
+  });
+
+  describe("OrchestratorLogger", () => {
+    it("onAttemptStart is called with attempt number and maxAttempts", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const { executor } = makeExecutor({
+        verifyResults: [{ pass: true, summary: "OK", failures: [] }],
+      });
+
+      const calls: { attempt: number; maxAttempts: number }[] = [];
+      const logger: OrchestratorLogger = {
+        onAttemptStart: (attempt, maxAttempts) =>
+          calls.push({ attempt, maxAttempts }),
+      };
+
+      await runVerifiedOrchestrator(issue, makeConfig(executor, { logger }));
+
+      expect(calls).toEqual([{ attempt: 1, maxAttempts: 3 }]);
+    });
+
+    it("onImplComplete is called with exitCode after impl", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const { executor } = makeExecutor({
+        implExitCode: 0,
+        verifyResults: [{ pass: true, summary: "OK", failures: [] }],
+      });
+
+      const calls: {
+        attempt: number;
+        maxAttempts: number;
+        exitCode: number;
+      }[] = [];
+      const logger: OrchestratorLogger = {
+        onImplComplete: (attempt, maxAttempts, exitCode) =>
+          calls.push({ attempt, maxAttempts, exitCode }),
+      };
+
+      await runVerifiedOrchestrator(issue, makeConfig(executor, { logger }));
+
+      expect(calls).toEqual([{ attempt: 1, maxAttempts: 3, exitCode: 0 }]);
+    });
+
+    it("onImplComplete is called with non-zero exitCode on impl failure", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const { executor } = makeExecutor({ implExitCode: 2 });
+
+      const calls: { exitCode: number }[] = [];
+      const logger: OrchestratorLogger = {
+        onImplComplete: (_attempt, _maxAttempts, exitCode) =>
+          calls.push({ exitCode }),
+      };
+
+      await runVerifiedOrchestrator(issue, makeConfig(executor, { logger }));
+
+      expect(calls).toEqual([{ exitCode: 2 }]);
+    });
+
+    it("onVerifyJudgment is called with judgment after verification", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const judgment: VerifyJudgment = {
+        pass: true,
+        summary: "All good",
+        failures: [],
+      };
+      const { executor } = makeExecutor({ verifyResults: [judgment] });
+
+      const calls: {
+        attempt: number;
+        maxAttempts: number;
+        judgment: VerifyJudgment;
+      }[] = [];
+      const logger: OrchestratorLogger = {
+        onVerifyJudgment: (attempt, maxAttempts, j) =>
+          calls.push({ attempt, maxAttempts, judgment: j }),
+      };
+
+      await runVerifiedOrchestrator(issue, makeConfig(executor, { logger }));
+
+      expect(calls).toEqual([{ attempt: 1, maxAttempts: 3, judgment }]);
+    });
+
+    it("onRetry is called when retrying after failed verification", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const failJudgment: VerifyJudgment = {
+        pass: false,
+        summary: "Fail",
+        failures: ["err"],
+      };
+      const passJudgment: VerifyJudgment = {
+        pass: true,
+        summary: "OK",
+        failures: [],
+      };
+      const { executor } = makeExecutor({
+        verifyResults: [failJudgment, passJudgment],
+      });
+
+      const calls: {
+        attempt: number;
+        maxAttempts: number;
+        judgment: VerifyJudgment;
+      }[] = [];
+      const logger: OrchestratorLogger = {
+        onRetry: (attempt, maxAttempts, j) =>
+          calls.push({ attempt, maxAttempts, judgment: j }),
+      };
+
+      await runVerifiedOrchestrator(issue, makeConfig(executor, { logger }));
+
+      expect(calls).toEqual([
+        { attempt: 1, maxAttempts: 3, judgment: failJudgment },
+      ]);
+    });
+
+    it("all callbacks fire correctly across multiple retries", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const { executor } = makeExecutor({
+        verifyResults: [
+          { pass: false, summary: "F1", failures: ["e1"] },
+          { pass: true, summary: "OK", failures: [] },
+        ],
+      });
+
+      const attemptStarts: number[] = [];
+      const implCompletes: number[] = [];
+      const verifyJudgments: boolean[] = [];
+      const retries: number[] = [];
+
+      const logger: OrchestratorLogger = {
+        onAttemptStart: (attempt) => attemptStarts.push(attempt),
+        onImplComplete: (attempt) => implCompletes.push(attempt),
+        onVerifyJudgment: (_attempt, _max, j) => verifyJudgments.push(j.pass),
+        onRetry: (attempt) => retries.push(attempt),
+      };
+
+      await runVerifiedOrchestrator(
+        issue,
+        makeConfig(executor, { maxRetries: 2, logger }),
+      );
+
+      expect(attemptStarts).toEqual([1, 2]);
+      expect(implCompletes).toEqual([1, 2]);
+      expect(verifyJudgments).toEqual([false, true]);
+      expect(retries).toEqual([1]);
+    });
+
+    it("logger is optional — no error when omitted", async () => {
+      const issue = createIssue(TEST_DB, {
+        title: "Test issue",
+        type: "feat",
+        acceptance: "Feature works",
+        branch: "feat/1-test",
+      });
+
+      const { executor } = makeExecutor({
+        verifyResults: [{ pass: true, summary: "OK", failures: [] }],
+      });
+
+      await expect(
+        runVerifiedOrchestrator(issue, makeConfig(executor)),
+      ).resolves.toMatchObject({ success: true });
+    });
   });
 
   it("passes --model flag when model is specified", async () => {
