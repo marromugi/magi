@@ -126,8 +126,8 @@ export async function runSandbox(
     ...buildSettingsMountArgs(config.settingsPath),
     // SSH agent forwarding for git auth (if available and socket is accessible)
     ...buildSshMountArgs(process.env["SSH_AUTH_SOCK"], ghToken),
-    // Block external network access when firewall is enabled
-    ...(config.enableFirewall ? ["--network", "none"] : []),
+    // Grant NET_ADMIN so init-firewall.sh can configure iptables rules
+    ...(config.enableFirewall ? ["--cap-add", "NET_ADMIN"] : []),
   ];
 
   // Add environment variables

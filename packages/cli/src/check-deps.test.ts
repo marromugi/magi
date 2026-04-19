@@ -158,10 +158,8 @@ describe("check-deps command", () => {
   });
 
   test("exits 0 when called without args and no MAGI_ISSUE_ID (hook pass-through)", () => {
-    const { MAGI_ISSUE_ID: _, ...envWithoutIssueId } = process.env as Record<
-      string,
-      string
-    >;
+    const envWithoutIssueId = { ...(process.env as Record<string, string>) };
+    delete envWithoutIssueId.MAGI_ISSUE_ID;
 
     const hookJson = JSON.stringify({
       tool_name: "Write",
