@@ -255,7 +255,14 @@ export async function runVerifiedOrchestrator(
 
       let judgment: VerifyJudgment;
       try {
-        judgment = JSON.parse(verifyResult.stdout) as VerifyJudgment;
+        const parsed = JSON.parse(verifyResult.stdout) as Record<
+          string,
+          unknown
+        >;
+        // claude -p --output-format json wraps the schema output in
+        // a result envelope with a `structured_output` field.
+        const raw = parsed.structured_output ?? parsed;
+        judgment = raw as VerifyJudgment;
       } catch {
         judgment = {
           pass: false,

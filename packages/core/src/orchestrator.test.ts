@@ -4,8 +4,11 @@ import { createIssue, getIssue } from "./issue.js";
 import {
   buildPrompt,
   runImplementOrchestrator,
+  runVerifiedOrchestrator,
   type OrchestratorConfig,
   type SandboxRunner,
+  type SandboxExecutor,
+  type VerifiedOrchestratorConfig,
 } from "./orchestrator.js";
 
 const TEST_DB = ":memory:";
@@ -194,5 +197,124 @@ describe("runImplementOrchestrator", () => {
 
     expect(capturedConfig?.repoPath).toBe("/my/repo");
     expect(capturedConfig?.baseBranch).toBe("develop");
+  });
+});
+
+// ── runVerifiedOrchestrator ──
+
+function makeMockExecutor(
+  verifyStdout: string,
+  opts?: { implExitCode?: number },
+): SandboxExecutor {
+  return {
+    start: async (config) => ({
+      containerName: "test-container",
+      branch: config.branch,
+      baseBranch: config.baseBranch,
+    }),
+    exec: async (_handle, command) => {
+      const cmd = command.join(" ");
+      // Implementation call
+      if (cmd.includes("--dangerously-skip-permissions")) {
+        return {
+          exitCode: opts?.implExitCode ?? 0,
+          stdout: "impl output",
+          stderr: "",
+        };
+      }
+      // Verification call
+      if (cmd.includes("--output-format")) {
+        return { exitCode: 0, stdout: verifyStdout, stderr: "" };
+      }
+      // commit-push
+      return { exitCode: 0, stdout: "", stderr: "" };
+    },
+    stop: async () => {},
+  };
+}
+
+describe("runVerifiedOrchestrator", () => {
+  it("extracts structured_output from Claude CLI envelope", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "Works",
+      branch: "feat/1-test",
+    });
+
+    const envelope = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      structured_output: { pass: true, summary: "All good", failures: [] },
+    });
+
+    const config: VerifiedOrchestratorConfig = {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      maxRetries: 0,
+      executor: makeMockExecutor(envelope),
+    };
+
+    const result = await runVerifiedOrchestrator(issue, config);
+    expect(result.success).toBe(true);
+
+    const updated = getIssue(TEST_DB, issue.id);
+    expect(updated?.status).toBe("implemented");
+  });
+
+  it("handles plain VerifyJudgment JSON (no envelope)", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "Works",
+      branch: "feat/2-test",
+    });
+
+    const plain = JSON.stringify({
+      pass: true,
+      summary: "All good",
+      failures: [],
+    });
+
+    const config: VerifiedOrchestratorConfig = {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      maxRetries: 0,
+      executor: makeMockExecutor(plain),
+    };
+
+    const result = await runVerifiedOrchestrator(issue, config);
+    expect(result.success).toBe(true);
+  });
+
+  it("fails gracefully when verification fails with envelope", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "Works",
+      branch: "feat/3-test",
+    });
+
+    const envelope = JSON.stringify({
+      type: "result",
+      structured_output: {
+        pass: false,
+        summary: "Tests fail",
+        failures: ["test_a failed"],
+      },
+    });
+
+    const config: VerifiedOrchestratorConfig = {
+      dbPath: TEST_DB,
+      repoPath: "/repo",
+      maxRetries: 0,
+      executor: makeMockExecutor(envelope),
+    };
+
+    const result = await runVerifiedOrchestrator(issue, config);
+    expect(result.success).toBe(false);
+
+    const updated = getIssue(TEST_DB, issue.id);
+    expect(updated?.status).toBe("failed");
   });
 });
