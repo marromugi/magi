@@ -105,6 +105,19 @@ fi
 
 claude "${CLAUDE_ARGS[@]}" "$PROMPT"
 
+# --- Capture Session ID ---
+SESSION_ID=""
+if [ -d "$HOME/.claude/projects" ]; then
+  SESSION_FILE=$(find "$HOME/.claude/projects" -name "*.jsonl" -type f 2>/dev/null \
+    | xargs ls -t 2>/dev/null | head -1) || true
+  if [ -n "${SESSION_FILE:-}" ]; then
+    SESSION_ID=$(basename "$SESSION_FILE" .jsonl)
+  fi
+fi
+if [ -n "$SESSION_ID" ]; then
+  log "session-id: $SESSION_ID"
+fi
+
 # --- Format ---
 if [ -n "$(git status --porcelain)" ]; then
   if [ -f "bun.lock" ] || [ -f "bunfig.toml" ]; then

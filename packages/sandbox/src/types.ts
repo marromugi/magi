@@ -48,6 +48,8 @@ export interface SandboxResult {
   containerName: string;
   /** PR URL if a PR was created, undefined otherwise */
   prUrl?: string;
+  /** Claude Code session ID captured from the container, null if not captured */
+  sessionId: string | null;
 }
 
 export const SANDBOX_IMAGE = "magi-sandbox:latest";

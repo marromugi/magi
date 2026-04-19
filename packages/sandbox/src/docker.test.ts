@@ -201,6 +201,43 @@ function makeSpawnMockWithOutput(stdout: string, exitCode = 0) {
   });
 }
 
+describe("runSandbox session-id parsing", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("parses session-id from output and sets sessionId", async () => {
+    spy = makeSpawnMockWithOutput(
+      "[magi-sandbox] 2026-04-19 10:30:00 session-id: abc123-def456-session",
+    );
+    const result = await runSandbox(baseConfig);
+    expect(result.sessionId).toBe("abc123-def456-session");
+  });
+
+  it("returns null sessionId when output has no session-id line", async () => {
+    spy = makeSpawnMockWithOutput("Some output without session id marker");
+    const result = await runSandbox(baseConfig);
+    expect(result.sessionId).toBeNull();
+  });
+
+  it("parses session-id alongside PR URL in the same output", async () => {
+    spy = makeSpawnMockWithOutput(
+      "[magi-sandbox] 2026-04-19 10:30:00 session-id: my-session-xyz\nhttps://github.com/owner/repo/pull/42",
+    );
+    const result = await runSandbox(baseConfig);
+    expect(result.sessionId).toBe("my-session-xyz");
+    expect(result.prUrl).toBe("https://github.com/owner/repo/pull/42");
+  });
+
+  it("returns null sessionId when container exits with non-zero", async () => {
+    spy = makeSpawnMockWithOutput("Error occurred", 1);
+    const result = await runSandbox(baseConfig);
+    expect(result.sessionId).toBeNull();
+  });
+});
+
 describe("runSandbox PR URL parsing", () => {
   let spy: ReturnType<typeof spyOn>;
 
