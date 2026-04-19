@@ -4,6 +4,9 @@ import {
   imageExists,
   runSandbox,
   listSandboxes,
+  startSandbox,
+  execInSandbox,
+  stopSandbox,
 } from "@magi/sandbox";
 import {
   resolveGhToken,
@@ -32,7 +35,8 @@ import {
   type IssueType,
   type IssuePriority,
   type IssueStatus,
-  buildPrompt,
+  runVerifiedOrchestrator,
+  type SandboxExecutor,
 } from "@magi/core";
 import { formatReviewAsMarkdown } from "./review-formatter";
 import { createDaemon } from "./daemon.js";
@@ -399,56 +403,39 @@ async function cmdDaemonStart(args: string[]) {
     concurrency,
     fetchReadyIssues: () => listReadyIssues(dbPath),
     runIssue: async (issue) => {
-      updateIssue(dbPath, issue.id, { status: "active" });
+      const executor: SandboxExecutor = {
+        start: (config) =>
+          startSandbox({
+            ...config,
+            repoPath,
+            commitMessage: issue.commit_message ?? undefined,
+            containerName: `magi-sandbox-issue-${issue.id}`,
+            enableFirewall: true,
+            oauthToken,
+            ghToken,
+          }),
+        exec: (handle, command, opts) =>
+          execInSandbox(handle, command, {
+            ...opts,
+            onStreams: async (stdout, stderr) => ({
+              stdout: await streamWithPrefix(stdout, issue.id),
+              stderr: await streamWithPrefix(stderr, issue.id),
+            }),
+          }),
+        stop: (handle) => stopSandbox(handle),
+      };
 
-      const branch = issue.branch ?? `feat/${issue.id}`;
-      const result = await runSandbox({
+      const result = await runVerifiedOrchestrator(issue, {
+        dbPath,
         repoPath,
-        branch,
         baseBranch: "main",
-        prompt: buildPrompt(issue),
-        commitMessage: issue.commit_message ?? undefined,
-        containerName: `magi-sandbox-issue-${issue.id}`,
-        enableFirewall: true,
-        oauthToken,
-        ghToken,
-        onStreams: async (stdout, stderr) => {
-          const [out, err] = await Promise.all([
-            streamWithPrefix(stdout, issue.id),
-            streamWithPrefix(stderr, issue.id),
-          ]);
-          return out + err;
-        },
+        maxRetries: 5,
+        executor,
       });
 
       if (!result.success) {
-        updateIssue(dbPath, issue.id, {
-          status: "failed",
-          failed_reason: `sandbox exited with code ${result.exitCode}`,
-        });
-        throw new Error(`sandbox exited with code ${result.exitCode}`);
+        throw new Error(`implementation failed for ${result.branch}`);
       }
-
-      // Verify the branch was actually pushed to remote
-      const verify = Bun.spawnSync(
-        ["git", "ls-remote", "--heads", "origin", branch],
-        { cwd: repoPath },
-      );
-      const pushed = verify.stdout.toString().trim().length > 0;
-      if (!pushed) {
-        updateIssue(dbPath, issue.id, {
-          status: "failed",
-          failed_reason: `sandbox exited 0 but branch ${branch} was not pushed to remote`,
-        });
-        throw new Error(
-          `sandbox exited 0 but branch ${branch} was not pushed to remote`,
-        );
-      }
-
-      updateIssue(dbPath, issue.id, {
-        status: "implemented",
-        branch: result.branch,
-      });
     },
     logger,
   });

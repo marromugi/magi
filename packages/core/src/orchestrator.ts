@@ -135,7 +135,14 @@ export type SandboxExecutor = {
   exec: (
     handle: SandboxHandle,
     command: string[],
-    opts?: { timeout?: number; env?: Record<string, string> },
+    opts?: {
+      timeout?: number;
+      env?: Record<string, string>;
+      onStreams?: (
+        stdout: ReadableStream<Uint8Array>,
+        stderr: ReadableStream<Uint8Array>,
+      ) => Promise<{ stdout: string; stderr: string }>;
+    },
   ) => Promise<ExecResult>;
   stop: (handle: SandboxHandle) => Promise<void>;
 };
@@ -167,6 +174,11 @@ export interface VerifiedOrchestratorConfig {
   model?: string;
   executor: SandboxExecutor;
   logger?: OrchestratorLogger;
+  /** Called for each exec to enable real-time streaming */
+  onStreams?: (
+    stdout: ReadableStream<Uint8Array>,
+    stderr: ReadableStream<Uint8Array>,
+  ) => Promise<{ stdout: string; stderr: string }>;
 }
 
 export async function runVerifiedOrchestrator(
@@ -190,6 +202,11 @@ export async function runVerifiedOrchestrator(
   const { logger } = config;
   let success = false;
   let output = "";
+  let failedReason = "";
+
+  const execOpts = config.onStreams
+    ? { onStreams: config.onStreams }
+    : undefined;
 
   try {
     let currentPrompt = buildPrompt(issue);
@@ -206,12 +223,13 @@ export async function runVerifiedOrchestrator(
         currentPrompt,
       ];
 
-      const implResult = await config.executor.exec(handle, implCmd);
+      const implResult = await config.executor.exec(handle, implCmd, execOpts);
       output += implResult.stdout + implResult.stderr;
 
       logger?.onImplComplete?.(attempt, maxAttempts, implResult.exitCode);
 
       if (implResult.exitCode !== 0) {
+        failedReason = `implementation failed with exit code ${implResult.exitCode}`;
         break;
       }
 
@@ -228,7 +246,11 @@ export async function runVerifiedOrchestrator(
         verifyPrompt,
       ];
 
-      const verifyResult = await config.executor.exec(handle, verifyCmd);
+      const verifyResult = await config.executor.exec(
+        handle,
+        verifyCmd,
+        execOpts,
+      );
       output += verifyResult.stdout + verifyResult.stderr;
 
       let judgment: VerifyJudgment;
@@ -249,22 +271,25 @@ export async function runVerifiedOrchestrator(
         break;
       }
 
-      // If not the last attempt, rebuild prompt with feedback
       if (attempt < maxAttempts) {
         logger?.onRetry?.(attempt, maxAttempts, judgment);
         currentPrompt = buildReimplementPrompt(buildPrompt(issue), judgment);
+      } else {
+        failedReason = `verification failed after ${maxAttempts} attempts: ${judgment.summary}`;
       }
     }
 
     if (success) {
-      // Commit and push
       await config.executor.exec(handle, ["/magi/scripts/commit-push.sh"]);
       updateIssue(config.dbPath, issue.id, {
         status: "implemented",
         branch,
       });
     } else {
-      updateIssue(config.dbPath, issue.id, { status: "blocked" });
+      updateIssue(config.dbPath, issue.id, {
+        status: "failed",
+        failed_reason: failedReason,
+      });
     }
   } finally {
     await config.executor.stop(handle);

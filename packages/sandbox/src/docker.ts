@@ -270,7 +270,15 @@ export async function startSandbox(
 export async function execInSandbox(
   handle: SandboxHandle,
   command: string[],
-  opts?: { timeout?: number; stream?: boolean; env?: Record<string, string> },
+  opts?: {
+    timeout?: number;
+    stream?: boolean;
+    env?: Record<string, string>;
+    onStreams?: (
+      stdout: ReadableStream<Uint8Array>,
+      stderr: ReadableStream<Uint8Array>,
+    ) => Promise<{ stdout: string; stderr: string }>;
+  },
 ): Promise<ExecResult> {
   const timeout = opts?.timeout ?? DEFAULT_TIMEOUT;
 
@@ -284,7 +292,8 @@ export async function execInSandbox(
 
   args.push(handle.containerName, ...command);
 
-  const streaming = opts?.stream ?? false;
+  const useCallback = !!opts?.onStreams;
+  const streaming = !useCallback && (opts?.stream ?? false);
   const proc = Bun.spawn(args, {
     stdout: streaming ? "inherit" : "pipe",
     stderr: streaming ? "inherit" : "pipe",
@@ -296,7 +305,14 @@ export async function execInSandbox(
 
   let stdout = "";
   let stderr = "";
-  if (!streaming) {
+  if (useCallback) {
+    const result = await opts!.onStreams!(
+      proc.stdout as ReadableStream<Uint8Array>,
+      proc.stderr as ReadableStream<Uint8Array>,
+    );
+    stdout = result.stdout;
+    stderr = result.stderr;
+  } else if (!streaming) {
     [stdout, stderr] = await Promise.all([
       new Response(proc.stdout as ReadableStream).text(),
       new Response(proc.stderr as ReadableStream).text(),
