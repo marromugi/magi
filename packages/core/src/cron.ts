@@ -6,11 +6,11 @@ function matchesCronField(field: string, value: number): boolean {
   }
 
   if (field.includes("/")) {
-    const [range, stepStr] = field.split("/");
+    const [range = "", stepStr = ""] = field.split("/");
     const step = parseInt(stepStr, 10);
     if (range === "*") return value % step === 0;
     if (range.includes("-")) {
-      const [start, end] = range.split("-").map(Number);
+      const [start = 0, end = 0] = range.split("-").map(Number);
       return value >= start && value <= end && (value - start) % step === 0;
     }
     const start = parseInt(range, 10);
@@ -18,7 +18,7 @@ function matchesCronField(field: string, value: number): boolean {
   }
 
   if (field.includes("-")) {
-    const [start, end] = field.split("-").map(Number);
+    const [start = 0, end = 0] = field.split("-").map(Number);
     return value >= start && value <= end;
   }
 
@@ -30,7 +30,13 @@ function matchesCron(cronExpr: string, date: Date): boolean {
   if (parts.length !== 5)
     throw new Error(`Invalid cron expression: ${cronExpr}`);
 
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   const dow = date.getDay(); // 0=Sun...6=Sat
 
   return (
