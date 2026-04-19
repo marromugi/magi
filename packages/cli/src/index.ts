@@ -26,6 +26,7 @@ import {
   removeReviewSchedule,
   markReviewed,
   generateWorkflow,
+  listPRQueue,
   closeDb,
   type IssueType,
   type IssuePriority,
@@ -466,6 +467,43 @@ async function cmdSandboxList() {
   }
 }
 
+function cmdPrList() {
+  const dbPath = getDbPath();
+  const result = listPRQueue(dbPath);
+
+  if (result instanceof Error) die(result.message);
+
+  if (result.length === 0) {
+    console.log("implemented な issue がありません");
+    return;
+  }
+
+  const colWidths = {
+    order: 5,
+    id: Math.max(4, ...result.map((i) => String(i.id).length)),
+    title: Math.max(5, ...result.map((i) => i.title.length)),
+    branch: Math.max(6, ...result.map((i) => (i.branch ?? "-").length)),
+  };
+
+  const row = (order: string, id: string, title: string, branch: string) =>
+    `${order.padEnd(colWidths.order)}  ${id.padEnd(colWidths.id)}  ${title.padEnd(colWidths.title)}  ${branch}`;
+
+  const sep = [
+    "-".repeat(colWidths.order),
+    "-".repeat(colWidths.id),
+    "-".repeat(colWidths.title),
+    "-".repeat(colWidths.branch),
+  ].join("  ");
+
+  console.log(row("Order", "ID", "Title", "Branch"));
+  console.log(sep);
+  result.forEach((issue, idx) => {
+    console.log(
+      row(String(idx + 1), String(issue.id), issue.title, issue.branch ?? "-"),
+    );
+  });
+}
+
 function printUsage() {
   console.log(`magi - autonomous coding agent orchestrator
 
@@ -485,6 +523,7 @@ Commands:
   daemon start [options]     Start daemon (--interval <s>, --concurrency <n>)
   check-interrupt <file>     Check if file is blocked by an interrupt issue
   check-deps [<issueId>]    Check if issue has unresolved dependencies (PreToolUse hook)
+  pr list                    List implemented issues in PR order
   sandbox run --branch <b> --prompt <p> [options]  Run a sandbox container
   sandbox build [--dockerfile <path>]              Build the magi-sandbox image
   sandbox list                                     List running sandbox containers`);
@@ -563,6 +602,10 @@ async function main() {
         default:
           die(`unknown sandbox command: ${subcommand}`);
       }
+      break;
+    case "pr":
+      if (subcommand === "list") cmdPrList();
+      else die(`unknown pr command: ${subcommand}`);
       break;
     case "check-interrupt":
       await cmdCheckInterrupt([subcommand ?? "", ...rest]);
