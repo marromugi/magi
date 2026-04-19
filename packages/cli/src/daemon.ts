@@ -35,6 +35,8 @@ export function createDaemon(options: DaemonOptions): Daemon {
       options.logger?.fail(issue, error);
     } finally {
       active.delete(issue.id);
+      // Immediately check for next ready issue instead of waiting for interval
+      if (timer !== null) tick();
     }
   }
 

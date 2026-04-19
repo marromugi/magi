@@ -16,6 +16,8 @@ function makeIssue(id: number): Issue {
     branch: null,
     commit_message: null,
     worktree_path: null,
+    session_id: null,
+    failed_reason: null,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
   };
@@ -184,6 +186,27 @@ describe("createDaemon", () => {
     const countAtStop = fetchReadyIssues.mock.calls.length;
     await Bun.sleep(50);
     expect(fetchReadyIssues.mock.calls.length).toBe(countAtStop);
+  });
+
+  it("immediately picks up next ready issue after completion", async () => {
+    const runOrder: number[] = [];
+    const readyQueue = [makeIssue(1), makeIssue(2)];
+    const daemon = createDaemon({
+      interval: 60_000, // long interval — should not matter
+      concurrency: 1,
+      fetchReadyIssues: () => {
+        // Return first not-yet-run issue (simulates status change after run)
+        return readyQueue.filter((i) => !runOrder.includes(i.id));
+      },
+      runIssue: async (issue) => {
+        runOrder.push(issue.id);
+      },
+    });
+    daemon.start();
+    // Wait enough for both to complete (but far less than interval)
+    await Bun.sleep(50);
+    await daemon.stop();
+    expect(runOrder).toEqual([1, 2]);
   });
 
   it("stop() waits for in-flight runIssue calls to complete", async () => {
