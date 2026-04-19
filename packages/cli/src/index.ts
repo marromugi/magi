@@ -20,6 +20,7 @@ import {
   listReadyIssues,
   addDependency,
   checkInterrupt,
+  checkDeps,
   createReviewSchedule,
   listReviewSchedules,
   removeReviewSchedule,
@@ -201,6 +202,49 @@ async function cmdCheckInterrupt(args: string[]) {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         additionalContext: `INTERRUPT: Issue #${result.issueId} '${result.title}' が進行中です。${result.reason}。現在の作業を WIP コミットして中断してください。`,
+      },
+    };
+    console.log(JSON.stringify(output));
+    process.exit(2);
+  }
+
+  process.exit(0);
+}
+
+async function cmdCheckDeps(args: string[]) {
+  let issueId = args[0] ? Number(args[0]) : NaN;
+
+  if (isNaN(issueId)) {
+    try {
+      const input = await Bun.stdin.text();
+      const hookInput = JSON.parse(input);
+      const fromStdin = hookInput.tool_input?.issue_id ?? hookInput.issue_id;
+      if (fromStdin !== undefined) issueId = Number(fromStdin);
+    } catch {
+      // パース失敗はスキップ
+    }
+    if (isNaN(issueId) && process.env.MAGI_ISSUE_ID) {
+      issueId = Number(process.env.MAGI_ISSUE_ID);
+    }
+  }
+
+  if (isNaN(issueId)) process.exit(0);
+
+  let result;
+  try {
+    result = checkDeps(getDbPath(), issueId);
+  } catch {
+    die(`issue #${issueId} not found`);
+  }
+
+  if (result.blocked) {
+    const depList = result.unresolvedDeps
+      .map((dep) => `  - #${dep.id} ${dep.title} (${dep.status})`)
+      .join("\n");
+    const output = {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        additionalContext: `BLOCKED: Issue #${issueId} の依存が未解決です。セッションを中断し、作業内容をコミットしてください。\n\n未解決の依存:\n${depList}`,
       },
     };
     console.log(JSON.stringify(output));
@@ -440,6 +484,7 @@ Commands:
   review run [<id>]          Run review (collect commits since last review)
   daemon start [options]     Start daemon (--interval <s>, --concurrency <n>)
   check-interrupt <file>     Check if file is blocked by an interrupt issue
+  check-deps [<issueId>]    Check if issue has unresolved dependencies (PreToolUse hook)
   sandbox run --branch <b> --prompt <p> [options]  Run a sandbox container
   sandbox build [--dockerfile <path>]              Build the magi-sandbox image
   sandbox list                                     List running sandbox containers`);
@@ -521,6 +566,9 @@ async function main() {
       break;
     case "check-interrupt":
       await cmdCheckInterrupt([subcommand ?? "", ...rest]);
+      break;
+    case "check-deps":
+      await cmdCheckDeps([subcommand ?? "", ...rest]);
       break;
     default:
       printUsage();
