@@ -20,6 +20,7 @@ export {
   listIssues,
   updateIssue,
   listReadyIssues,
+  addDependency,
   checkDeps,
 } from "./issue.js";
 

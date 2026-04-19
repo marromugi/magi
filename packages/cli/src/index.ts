@@ -18,6 +18,7 @@ import {
   listIssues,
   updateIssue,
   listReadyIssues,
+  addDependency,
   checkInterrupt,
   createReviewSchedule,
   listReviewSchedules,
@@ -144,6 +145,29 @@ function cmdIssueUpdate(args: string[]) {
 function cmdIssueReady() {
   const issues = listReadyIssues(getDbPath());
   console.log(JSON.stringify(issues, null, 2));
+}
+
+function cmdIssueAddDep(args: string[]) {
+  const issueId = Number(args[0]);
+  const depId = Number(args[1]);
+  if (isNaN(issueId) || isNaN(depId))
+    die("usage: issue add-dep <issueId> <depId>");
+
+  const dbPath = getDbPath();
+  const before = getIssue(dbPath, issueId);
+
+  let issue;
+  try {
+    issue = addDependency(dbPath, issueId, depId);
+  } catch (e) {
+    die((e as Error).message);
+  }
+
+  if (before?.status === "active" && issue.status === "blocked") {
+    console.log("blocked に変更しました");
+  }
+
+  console.log(JSON.stringify(issue, null, 2));
 }
 
 async function cmdCheckInterrupt(args: string[]) {
@@ -447,6 +471,9 @@ async function main() {
           break;
         case "ready":
           cmdIssueReady();
+          break;
+        case "add-dep":
+          cmdIssueAddDep(rest);
           break;
         default:
           die(`unknown issue command: ${subcommand}`);
