@@ -13,6 +13,8 @@ import {
   listReadyIssues,
   addDependency,
   checkDeps,
+  rebaseIssueBranch,
+  type ExecFnWithStatus,
 } from "./issue.js";
 import { sendWebhook } from "./webhook.js";
 import { closeDb, migrate } from "./db.js";
@@ -648,5 +650,157 @@ describe("session_id", () => {
     updateIssue(dbPath, issue.id, { session_id: "ses_abc123" });
     const cleared = updateIssue(dbPath, issue.id, { session_id: null });
     expect(cleared?.session_id).toBeNull();
+  });
+});
+
+describe("rebaseIssueBranch", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-rebase-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  function ok(): ReturnType<ExecFnWithStatus> {
+    return { stdout: "", exitCode: 0 };
+  }
+  function lsFound(branch: string): ReturnType<ExecFnWithStatus> {
+    return { stdout: `abc123\trefs/heads/${branch}\n`, exitCode: 0 };
+  }
+  function rebaseFail(): ReturnType<ExecFnWithStatus> {
+    return { stdout: "CONFLICT", exitCode: 1 };
+  }
+
+  test("returns null and skips exec when issue has no branch", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const exec = mock(() => ok());
+    const result = rebaseIssueBranch(dbPath, issue.id, exec);
+    expect(result).toBeNull();
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  test("returns null and skips exec when issue is not found", () => {
+    const exec = mock(() => ok());
+    const result = rebaseIssueBranch(dbPath, 9999, exec);
+    expect(result).toBeNull();
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  test("skips rebase when remote branch does not exist", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/t",
+    });
+    const exec = mock((cmd: string, args: string[]) => {
+      if (args[0] === "ls-remote") return { stdout: "", exitCode: 0 };
+      return ok();
+    });
+    const result = rebaseIssueBranch(dbPath, issue.id, exec);
+    expect(result).toBeNull();
+    const rebaseCalls = exec.mock.calls.filter(
+      ([, args]: [string, string[]]) => args[0] === "rebase",
+    );
+    expect(rebaseCalls).toHaveLength(0);
+  });
+
+  test("calls fetch, rebase, and force push on success and returns null", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/t",
+    });
+    const calls: { cmd: string; args: string[] }[] = [];
+    const exec = mock((cmd: string, args: string[]) => {
+      calls.push({ cmd, args });
+      if (args[0] === "ls-remote") return lsFound("feat/t");
+      return ok();
+    });
+    const result = rebaseIssueBranch(dbPath, issue.id, exec);
+    expect(result).toBeNull();
+    expect(calls).toContainEqual({ cmd: "git", args: ["fetch", "origin"] });
+    expect(calls).toContainEqual({
+      cmd: "git",
+      args: ["rebase", "origin/main", "feat/t"],
+    });
+    expect(calls).toContainEqual({
+      cmd: "git",
+      args: ["push", "--force-with-lease", "origin", "feat/t"],
+    });
+  });
+
+  test("calls rebase --abort and returns Error on conflict", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/t",
+    });
+    const exec = mock((cmd: string, args: string[]) => {
+      if (args[0] === "ls-remote") return lsFound("feat/t");
+      if (args[0] === "rebase" && !args.includes("--abort"))
+        return rebaseFail();
+      return ok();
+    });
+    const result = rebaseIssueBranch(dbPath, issue.id, exec);
+    expect(result).toBeInstanceOf(Error);
+    const abortCalls = exec.mock.calls.filter(
+      ([, args]: [string, string[]]) =>
+        args[0] === "rebase" && args.includes("--abort"),
+    );
+    expect(abortCalls).toHaveLength(1);
+  });
+
+  test("updates issue status to blocked on rebase conflict", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/t",
+    });
+    const exec = mock((cmd: string, args: string[]) => {
+      if (args[0] === "ls-remote") return lsFound("feat/t");
+      if (args[0] === "rebase" && !args.includes("--abort"))
+        return rebaseFail();
+      return ok();
+    });
+    rebaseIssueBranch(dbPath, issue.id, exec);
+    const updated = getIssue(dbPath, issue.id);
+    expect(updated?.status).toBe("blocked");
+  });
+
+  test("does not force push on rebase conflict", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/t",
+    });
+    const exec = mock((cmd: string, args: string[]) => {
+      if (args[0] === "ls-remote") return lsFound("feat/t");
+      if (args[0] === "rebase" && !args.includes("--abort"))
+        return rebaseFail();
+      return ok();
+    });
+    rebaseIssueBranch(dbPath, issue.id, exec);
+    const pushCalls = exec.mock.calls.filter(
+      ([, args]: [string, string[]]) => args[0] === "push",
+    );
+    expect(pushCalls).toHaveLength(0);
   });
 });
