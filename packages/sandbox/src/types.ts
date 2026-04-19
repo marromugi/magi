@@ -54,6 +54,27 @@ export interface SandboxResult {
   sessionId: string | null;
 }
 
+/** Handle to a running long-lived sandbox container */
+export interface SandboxHandle {
+  containerName: string;
+  branch: string;
+  baseBranch: string;
+}
+
+/** Result from docker exec */
+export interface ExecResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+/** Structured verification judgment from Claude */
+export interface VerifyJudgment {
+  pass: boolean;
+  summary: string;
+  failures: string[];
+}
+
 export const SANDBOX_IMAGE = "magi-sandbox:latest";
 
 export const DEFAULT_TIMEOUT = 600_000; // 10 minutes

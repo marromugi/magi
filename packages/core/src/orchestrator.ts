@@ -1,5 +1,11 @@
 import { updateIssue } from "./issue.js";
 import type { Issue } from "./issue.js";
+import {
+  VERIFY_JSON_SCHEMA,
+  buildVerifyPrompt,
+  buildReimplementPrompt,
+} from "./verification.js";
+import type { VerifyJudgment } from "./verification.js";
 
 export interface SandboxRunConfig {
   repoPath: string;
@@ -105,5 +111,142 @@ export async function runImplementOrchestrator(
     success: result.success,
     output: result.output,
     branch: result.branch,
+  };
+}
+
+// ── Verified Orchestrator ──
+
+/** Handle to a running long-lived sandbox container */
+interface SandboxHandle {
+  containerName: string;
+  branch: string;
+  baseBranch: string;
+}
+
+/** Result from docker exec */
+interface ExecResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+export type SandboxExecutor = {
+  start: (config: SandboxRunConfig) => Promise<SandboxHandle>;
+  exec: (
+    handle: SandboxHandle,
+    command: string[],
+    opts?: { timeout?: number; env?: Record<string, string> },
+  ) => Promise<ExecResult>;
+  stop: (handle: SandboxHandle) => Promise<void>;
+};
+
+export interface VerifiedOrchestratorConfig {
+  dbPath: string;
+  repoPath: string;
+  baseBranch?: string;
+  maxRetries?: number; // default: 2
+  model?: string;
+  executor: SandboxExecutor;
+}
+
+export async function runVerifiedOrchestrator(
+  issue: Issue,
+  config: VerifiedOrchestratorConfig,
+): Promise<OrchestratorResult> {
+  const branch = issue.branch ?? `feat/${issue.id}`;
+  const baseBranch = config.baseBranch ?? "main";
+  const maxRetries = config.maxRetries ?? 2;
+  const maxAttempts = maxRetries + 1;
+
+  updateIssue(config.dbPath, issue.id, { status: "active" });
+
+  const handle = await config.executor.start({
+    repoPath: config.repoPath,
+    branch,
+    baseBranch,
+    prompt: "", // prompt is not used by startSandbox
+  });
+
+  let success = false;
+  let output = "";
+
+  try {
+    let currentPrompt = buildPrompt(issue);
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Run implementation
+      const implCmd = [
+        "claude",
+        "--dangerously-skip-permissions",
+        "--print",
+        ...(config.model ? ["--model", config.model] : []),
+        currentPrompt,
+      ];
+
+      const implResult = await config.executor.exec(handle, implCmd);
+      output += implResult.stdout + implResult.stderr;
+
+      if (implResult.exitCode !== 0) {
+        // Implementation itself failed — blocked immediately
+        break;
+      }
+
+      // Run verification
+      const verifyPrompt = buildVerifyPrompt(currentPrompt, attempt);
+      const verifyCmd = [
+        "claude",
+        "-p",
+        "--output-format",
+        "json",
+        "--json-schema",
+        JSON.stringify(VERIFY_JSON_SCHEMA),
+        ...(config.model ? ["--model", config.model] : []),
+        verifyPrompt,
+      ];
+
+      const verifyResult = await config.executor.exec(handle, verifyCmd);
+      output += verifyResult.stdout + verifyResult.stderr;
+
+      let judgment: VerifyJudgment;
+      try {
+        judgment = JSON.parse(verifyResult.stdout) as VerifyJudgment;
+      } catch {
+        // Failed to parse verification result — treat as failure
+        judgment = {
+          pass: false,
+          summary: "Failed to parse verification result",
+          failures: [verifyResult.stdout],
+        };
+      }
+
+      if (judgment.pass) {
+        success = true;
+        break;
+      }
+
+      // If not the last attempt, rebuild prompt with feedback
+      if (attempt < maxAttempts) {
+        currentPrompt = buildReimplementPrompt(buildPrompt(issue), judgment);
+      }
+    }
+
+    if (success) {
+      // Commit and push
+      await config.executor.exec(handle, ["/magi/scripts/commit-push.sh"]);
+      updateIssue(config.dbPath, issue.id, {
+        status: "done",
+        branch,
+      });
+    } else {
+      updateIssue(config.dbPath, issue.id, { status: "blocked" });
+    }
+  } finally {
+    await config.executor.stop(handle);
+  }
+
+  return {
+    success,
+    output,
+    branch,
   };
 }

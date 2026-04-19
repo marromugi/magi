@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
-import { runSandbox } from "./docker.js";
-import type { SandboxConfig } from "./types.js";
+import {
+  runSandbox,
+  startSandbox,
+  execInSandbox,
+  stopSandbox,
+} from "./docker.js";
+import type { SandboxConfig, SandboxHandle } from "./types.js";
 
 function makeSpawnMock(exitCode = 0) {
   return spyOn(Bun, "spawn").mockImplementation(() => {
@@ -449,5 +454,135 @@ describe("runSandbox SSH_AUTH_SOCK handling", () => {
     await runSandbox(baseConfig);
     const args = spawnArgs(spawnSpy);
     expect(args.some((a) => a.includes("ssh-agent"))).toBe(false);
+  });
+});
+
+// ── startSandbox tests ──
+
+describe("startSandbox", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    spy = makeSpawnMockWithOutput("container-id-abc\n");
+    delete process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+    delete process.env["GH_TOKEN"];
+    delete process.env["SSH_AUTH_SOCK"];
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("uses 'docker run -d' (detached) without --rm", async () => {
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const args = spawnArgs(spy);
+    expect(args).toContain("docker");
+    expect(args).toContain("run");
+    expect(args).toContain("-d");
+    expect(args).not.toContain("--rm");
+  });
+
+  it("sets MODE=setup env var", async () => {
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const args = spawnArgs(spy);
+    const env = envArgs(args);
+    expect(env["MODE"]).toBe("setup");
+  });
+
+  it("does NOT pass PROMPT env var", async () => {
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const args = spawnArgs(spy);
+    const env = envArgs(args);
+    expect(env["PROMPT"]).toBeUndefined();
+  });
+
+  it("returns a SandboxHandle with containerName, branch, baseBranch", async () => {
+    const handle = await startSandbox({
+      ...baseConfig,
+      containerName: "my-ctr",
+      baseBranch: "develop",
+    });
+    expect(handle.containerName).toBe("my-ctr");
+    expect(handle.branch).toBe("test-branch");
+    expect(handle.baseBranch).toBe("develop");
+  });
+
+  it("defaults baseBranch to main", async () => {
+    const handle = await startSandbox({
+      ...baseConfig,
+      containerName: "my-ctr",
+    });
+    expect(handle.baseBranch).toBe("main");
+  });
+
+  it("passes BRANCH and BASE_BRANCH env vars", async () => {
+    await startSandbox({
+      ...baseConfig,
+      containerName: "test-ctr",
+      baseBranch: "develop",
+    });
+    const args = spawnArgs(spy);
+    const env = envArgs(args);
+    expect(env["BRANCH"]).toBe("test-branch");
+    expect(env["BASE_BRANCH"]).toBe("develop");
+  });
+
+  it("mounts repo as read-only", async () => {
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const args = spawnArgs(spy);
+    expect(args).toContain("/workspace/repo:/repo:ro");
+  });
+});
+
+// ── execInSandbox tests ──
+
+describe("execInSandbox", () => {
+  let spy: ReturnType<typeof spyOn>;
+  const handle: SandboxHandle = {
+    containerName: "magi-sandbox-test",
+    branch: "feat/1-test",
+    baseBranch: "main",
+  };
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it("runs docker exec with the container name and command", async () => {
+    spy = makeSpawnMockWithOutput("hello\n");
+    const result = await execInSandbox(handle, ["echo", "hello"]);
+    const args = spawnArgs(spy);
+    expect(args[0]).toBe("docker");
+    expect(args[1]).toBe("exec");
+    expect(args).toContain("magi-sandbox-test");
+    expect(args).toContain("echo");
+    expect(args).toContain("hello");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("hello");
+  });
+
+  it("returns non-zero exit code on failure", async () => {
+    spy = makeSpawnMockWithOutput("error\n", 1);
+    const result = await execInSandbox(handle, ["false"]);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("passes env vars with -e flags when provided", async () => {
+    spy = makeSpawnMockWithOutput("");
+    await execInSandbox(handle, ["cmd"], {
+      env: { FOO: "bar", BAZ: "qux" },
+    });
+    const args = spawnArgs(spy);
+    expect(args).toContain("-e");
+    expect(args).toContain("FOO=bar");
+    expect(args).toContain("BAZ=qux");
+  });
+});
+
+// ── stopSandbox tests ──
+
+describe("stopSandbox", () => {
+  it("is a function that accepts a SandboxHandle", () => {
+    expect(typeof stopSandbox).toBe("function");
   });
 });

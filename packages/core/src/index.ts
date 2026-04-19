@@ -39,9 +39,19 @@ export {
   type SandboxRunner,
   type OrchestratorConfig,
   type OrchestratorResult,
+  type SandboxExecutor,
+  type VerifiedOrchestratorConfig,
   buildPrompt,
   runImplementOrchestrator,
+  runVerifiedOrchestrator,
 } from "./orchestrator.js";
+
+export {
+  type VerifyJudgment,
+  VERIFY_JSON_SCHEMA,
+  buildVerifyPrompt,
+  buildReimplementPrompt,
+} from "./verification.js";
 
 export {
   type WebhookEvent,
