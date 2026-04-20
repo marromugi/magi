@@ -49,7 +49,7 @@ describe("listReadyIssues", () => {
     expect(exec).not.toHaveBeenCalled();
   });
 
-  test("returns issue when all deps are done and have no branch", () => {
+  test("returns issue when all deps are done and remote branch is gone", () => {
     const dep = createIssue(dbPath, {
       title: "dep",
       type: "feat",
@@ -65,7 +65,6 @@ describe("listReadyIssues", () => {
     const exec = mock(() => "");
     const ready = listReadyIssues(dbPath, exec);
     expect(ready.map((i) => i.id)).toContain(issue.id);
-    expect(exec).not.toHaveBeenCalled();
   });
 
   test("excludes issue when dep is not done", () => {
@@ -156,7 +155,7 @@ describe("listReadyIssues", () => {
     });
   });
 
-  test("returns issue when dep is implemented and has no branch", () => {
+  test("returns issue when dep is implemented and remote branch is gone", () => {
     const dep = createIssue(dbPath, {
       title: "dep",
       type: "feat",
@@ -172,10 +171,9 @@ describe("listReadyIssues", () => {
     const exec = mock(() => "");
     const ready = listReadyIssues(dbPath, exec);
     expect(ready.map((i) => i.id)).toContain(issue.id);
-    expect(exec).not.toHaveBeenCalled();
   });
 
-  test("returns issue when dep is in-review and has no branch", () => {
+  test("returns issue when dep is in-review and remote branch is gone", () => {
     const dep = createIssue(dbPath, {
       title: "dep",
       type: "feat",
@@ -191,7 +189,6 @@ describe("listReadyIssues", () => {
     const exec = mock(() => "");
     const ready = listReadyIssues(dbPath, exec);
     expect(ready.map((i) => i.id)).toContain(issue.id);
-    expect(exec).not.toHaveBeenCalled();
   });
 
   test("runs git fetch only once even with multiple branched deps", () => {
@@ -718,7 +715,7 @@ describe("rebaseIssueBranch", () => {
     return { stdout: "CONFLICT", exitCode: 1 };
   }
 
-  test("returns null and skips exec when issue has no branch", () => {
+  test("returns null when remote branch does not exist for auto-generated branch", () => {
     const issue = createIssue(dbPath, {
       title: "T",
       type: "feat",
@@ -727,7 +724,6 @@ describe("rebaseIssueBranch", () => {
     const exec = mock(() => ok());
     const result = rebaseIssueBranch(dbPath, issue.id, exec);
     expect(result).toBeNull();
-    expect(exec).not.toHaveBeenCalled();
   });
 
   test("returns null and skips exec when issue is not found", () => {
@@ -927,6 +923,95 @@ describe("failed status", () => {
   });
 });
 
+describe("createIssue branch", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-issue-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+    mockSendWebhook.mockClear();
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("auto-generates branch name in type/ID-title-slug format when branch is omitted", () => {
+    const issue = createIssue(dbPath, {
+      title: "My New Feature",
+      type: "feat",
+      acceptance: "ok",
+    });
+    expect(issue.branch).toBe(`feat/${issue.id}-my-new-feature`);
+  });
+
+  test("slug contains only alphanumeric characters and hyphens", () => {
+    const issue = createIssue(dbPath, {
+      title: "Fix: bug & special chars!",
+      type: "fix",
+      acceptance: "ok",
+    });
+    const afterSlash = issue.branch!.split("/")[1]!;
+    const slug = afterSlash.replace(/^\d+-/, "");
+    expect(slug).toMatch(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/);
+  });
+
+  test("auto-generated branch is persisted to the issue branch field in DB", () => {
+    const issue = createIssue(dbPath, {
+      title: "Auto Branch",
+      type: "chore",
+      acceptance: "ok",
+    });
+    const fetched = getIssue(dbPath, issue.id);
+    expect(fetched?.branch).toBe(issue.branch);
+  });
+
+  test("uses explicit branch when provided", () => {
+    const issue = createIssue(dbPath, {
+      title: "T",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/custom-branch",
+    });
+    expect(issue.branch).toBe("feat/custom-branch");
+  });
+
+  test("throws when explicit branch is already used by another issue", () => {
+    createIssue(dbPath, {
+      title: "First",
+      type: "feat",
+      acceptance: "ok",
+      branch: "feat/my-branch",
+    });
+    expect(() =>
+      createIssue(dbPath, {
+        title: "Second",
+        type: "feat",
+        acceptance: "ok",
+        branch: "feat/my-branch",
+      }),
+    ).toThrow();
+  });
+
+  test("multiple auto-generated branches are unique", () => {
+    const a = createIssue(dbPath, {
+      title: "Same Title",
+      type: "feat",
+      acceptance: "ok",
+    });
+    const b = createIssue(dbPath, {
+      title: "Same Title",
+      type: "feat",
+      acceptance: "ok",
+    });
+    expect(a.branch).not.toBe(b.branch);
+  });
+});
+
 describe("skipped status", () => {
   let tmpDir: string;
   let dbPath: string;
@@ -966,7 +1051,7 @@ describe("skipped status", () => {
     expect(ready.find((i) => i.id === issue.id)).toBeUndefined();
   });
 
-  test("listReadyIssues returns issue when dep is skipped and has no branch", () => {
+  test("listReadyIssues returns issue when dep is skipped and remote branch is gone", () => {
     const dep = createIssue(dbPath, {
       title: "dep",
       type: "feat",
@@ -982,7 +1067,6 @@ describe("skipped status", () => {
     const exec = mock(() => "");
     const ready = listReadyIssues(dbPath, exec);
     expect(ready.map((i) => i.id)).toContain(issue.id);
-    expect(exec).not.toHaveBeenCalled();
   });
 
   test("checkDeps treats skipped dep as resolved", () => {
