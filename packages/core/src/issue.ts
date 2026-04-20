@@ -302,7 +302,7 @@ export function listReadyIssues(
        AND NOT EXISTS (
          SELECT 1 FROM json_each(i.depends_on) AS d
          JOIN issues dep ON dep.id = CAST(d.value AS INTEGER)
-         WHERE dep.status NOT IN ('done', 'implemented', 'in-review', 'skipped')
+         WHERE dep.status NOT IN ('done', 'skipped')
        )
        ORDER BY i.id`,
     )

@@ -155,7 +155,7 @@ describe("listReadyIssues", () => {
     });
   });
 
-  test("returns issue when dep is implemented and remote branch is gone", () => {
+  test("excludes issue when dep is implemented (not yet done)", () => {
     const dep = createIssue(dbPath, {
       title: "dep",
       type: "feat",
@@ -170,10 +170,10 @@ describe("listReadyIssues", () => {
     });
     const exec = mock(() => "");
     const ready = listReadyIssues(dbPath, exec);
-    expect(ready.map((i) => i.id)).toContain(issue.id);
+    expect(ready.map((i) => i.id)).not.toContain(issue.id);
   });
 
-  test("returns issue when dep is in-review and remote branch is gone", () => {
+  test("excludes issue when dep is in-review (not yet done)", () => {
     const dep = createIssue(dbPath, {
       title: "dep",
       type: "feat",
@@ -188,7 +188,7 @@ describe("listReadyIssues", () => {
     });
     const exec = mock(() => "");
     const ready = listReadyIssues(dbPath, exec);
-    expect(ready.map((i) => i.id)).toContain(issue.id);
+    expect(ready.map((i) => i.id)).not.toContain(issue.id);
   });
 
   test("runs git fetch only once even with multiple branched deps", () => {
