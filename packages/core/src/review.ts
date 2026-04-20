@@ -207,8 +207,13 @@ function defaultGitLog(
   if (!stdout) return [];
 
   return stdout.split("\n").map((line) => {
-    const [hash, author, date, subject] = line.split("\t");
-    return { hash, author, date, subject };
+    const parts = line.split("\t");
+    return {
+      hash: parts[0] ?? "",
+      author: parts[1] ?? "",
+      date: parts[2] ?? "",
+      subject: parts[3] ?? "",
+    };
   });
 }
 
