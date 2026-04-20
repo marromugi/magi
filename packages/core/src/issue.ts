@@ -93,8 +93,27 @@ function defaultExecWithStatus(
 
 // ── CRUD ──
 
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function createIssue(dbPath: string, input: CreateIssueInput): Issue {
   const d = db(dbPath);
+
+  if (input.branch !== undefined) {
+    const conflict = d
+      .query<{ id: number }, [string]>("SELECT id FROM issues WHERE branch = ?")
+      .get(input.branch);
+    if (conflict) {
+      throw new Error(
+        `Branch '${input.branch}' is already used by issue ${conflict.id}`,
+      );
+    }
+  }
+
   const result = d.run(
     `INSERT INTO issues (title, type, priority, depends_on, affects, acceptance, context, branch, commit_message)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -110,7 +129,15 @@ export function createIssue(dbPath: string, input: CreateIssueInput): Issue {
       input.commit_message ?? null,
     ],
   );
-  const issue = getIssue(dbPath, Number(result.lastInsertRowid))!;
+
+  const id = Number(result.lastInsertRowid);
+
+  if (input.branch === undefined) {
+    const branch = `${input.type}/${id}-${slugify(input.title)}`;
+    d.run("UPDATE issues SET branch = ? WHERE id = ?", [branch, id]);
+  }
+
+  const issue = getIssue(dbPath, id)!;
   sendWebhook({ event: "issue.created", issue });
   return issue;
 }
