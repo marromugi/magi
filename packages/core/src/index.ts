@@ -74,6 +74,10 @@ export {
   type ReviewSchedule,
   type CreateReviewScheduleInput,
   type UpdateReviewScheduleInput,
+  type CommitInfo,
+  type ReviewRunConfig,
+  type ReviewRunResult,
+  type ClaudeReviewer,
   createReviewSchedule,
   getReviewSchedule,
   listReviewSchedules,
@@ -81,4 +85,5 @@ export {
   removeReviewSchedule,
   markReviewed,
   generateWorkflow,
+  runReview,
 } from "./review.js";

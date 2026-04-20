@@ -39,6 +39,7 @@ import {
   type SandboxExecutor,
 } from "@magi/core";
 import { formatReviewAsMarkdown } from "./review-formatter";
+import { validateIssue, runImplement } from "./implement.js";
 import { createDaemon } from "./daemon.js";
 import {
   createRichLogger,
@@ -574,6 +575,72 @@ function cmdPrList() {
   });
 }
 
+async function cmdImplement(args: string[]) {
+  const id = Number(args[0]);
+  if (!id || isNaN(id)) die("usage: magi implement <issue-id>");
+
+  const flags = parseFlags(args.slice(1));
+  const dbPath = getDbPath();
+  migrate(dbPath);
+
+  const validation = validateIssue(dbPath, id);
+  if (!validation.ok) die(validation.reason);
+
+  const issue = validation.issue;
+  const oauthToken = resolveOauthToken();
+  if (!oauthToken)
+    die(
+      "CLAUDE_CODE_OAUTH_TOKEN is not set. Please set it to your Claude OAuth token.",
+    );
+  const ghToken = await resolveGhToken();
+  const repoPath = getProjectRoot();
+  const baseBranch = flags["base-branch"] ?? "main";
+  const maxRetries = Number(flags["max-retries"] ?? "2");
+
+  const containerName = `magi-sandbox-issue-${id}`;
+
+  const executor: SandboxExecutor = {
+    start: (config) =>
+      startSandbox({
+        ...config,
+        repoPath,
+        commitMessage: issue.commit_message ?? undefined,
+        containerName,
+        enableFirewall: true,
+        oauthToken,
+        ghToken,
+      }),
+    exec: (handle, command, opts) =>
+      execInSandbox(handle, command, {
+        ...opts,
+        onStreams: async (stdout, stderr) => ({
+          stdout: await streamWithPrefix(stdout, id),
+          stderr: await streamWithPrefix(stderr, id),
+        }),
+      }),
+    stop: (handle) => stopSandbox(handle),
+  };
+
+  console.log(`[implement] starting issue #${id}: ${issue.title}`);
+
+  const result = await runImplement(issue, {
+    dbPath,
+    repoPath,
+    baseBranch,
+    maxRetries,
+    executor,
+  });
+
+  if (result.success) {
+    console.log(
+      `[implement] issue #${id} implemented on branch ${result.branch}`,
+    );
+  } else {
+    console.error(`[implement] issue #${id} failed`);
+    process.exit(1);
+  }
+}
+
 function printUsage() {
   console.log(`magi - autonomous coding agent orchestrator
 
@@ -592,6 +659,7 @@ Commands:
   review run [<id>]          Run review (collect commits since last review)
   pr start [options]         Start PR daemon (--auto-merge, --interval <s>, --once)
   daemon start [options]     Start daemon (--interval <s>, --concurrency <n>)
+  implement <id> [options]   Implement an issue using verified orchestrator
   check-interrupt <file>     Check if file is blocked by an interrupt issue
   check-deps [<issueId>]    Check if issue has unresolved dependencies (PreToolUse hook)
   pr list                    List implemented issues in PR order
@@ -678,6 +746,9 @@ async function main() {
         default:
           die(`unknown sandbox command: ${subcommand}`);
       }
+      break;
+    case "implement":
+      await cmdImplement([subcommand ?? "", ...rest]);
       break;
     case "check-interrupt":
       await cmdCheckInterrupt([subcommand ?? "", ...rest]);
