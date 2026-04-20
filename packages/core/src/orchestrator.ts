@@ -1,3 +1,4 @@
+import { commitAndPush } from "./commit-push.js";
 import { updateIssue } from "./issue.js";
 import type { Issue } from "./issue.js";
 import {
@@ -117,7 +118,7 @@ export async function runImplementOrchestrator(
 // ── Verified Orchestrator ──
 
 /** Handle to a running long-lived sandbox container */
-interface SandboxHandle {
+export interface SandboxHandle {
   containerName: string;
   branch: string;
   baseBranch: string;
@@ -287,7 +288,13 @@ export async function runVerifiedOrchestrator(
     }
 
     if (success) {
-      await config.executor.exec(handle, ["/magi/scripts/commit-push.sh"]);
+      await commitAndPush({
+        handle,
+        executor: config.executor,
+        branch,
+        commitMessage:
+          issue.commit_message ?? "chore: automated changes by magi",
+      });
       updateIssue(config.dbPath, issue.id, {
         status: "implemented",
         branch,

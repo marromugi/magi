@@ -28,12 +28,10 @@ interface ExecCall {
 function makeExecutor(opts: {
   implExitCode?: number;
   verifyResults?: VerifyJudgment[];
-  commitExitCode?: number;
 }): { executor: SandboxExecutor; execCalls: ExecCall[]; stopped: boolean } {
   const {
     implExitCode = 0,
     verifyResults = [{ pass: true, summary: "OK", failures: [] }],
-    commitExitCode = 0,
   } = opts;
 
   const execCalls: ExecCall[] = [];
@@ -50,10 +48,6 @@ function makeExecutor(opts: {
       execCalls.push({ command, env: execOpts?.env });
 
       // Detect which type of exec call this is
-      if (command.includes("/magi/scripts/commit-push.sh")) {
-        return { exitCode: commitExitCode, stdout: "", stderr: "" };
-      }
-
       if (command.includes("--json-schema")) {
         // Verification call
         const result =
@@ -248,7 +242,7 @@ describe("runVerifiedOrchestrator", () => {
     expect(implCalls.length).toBe(3); // 1 initial + 2 retries
   });
 
-  it("calls commit-push script on success", async () => {
+  it("runs git commit on success", async () => {
     const issue = createIssue(TEST_DB, {
       title: "Test issue",
       type: "feat",
@@ -262,13 +256,13 @@ describe("runVerifiedOrchestrator", () => {
 
     await runVerifiedOrchestrator(issue, makeConfig(executor));
 
-    const commitCalls = execCalls.filter((c) =>
-      c.command.includes("/magi/scripts/commit-push.sh"),
+    const commitCalls = execCalls.filter(
+      (c) => c.command.includes("git") && c.command.includes("commit"),
     );
     expect(commitCalls.length).toBe(1);
   });
 
-  it("does not call commit-push script on failure", async () => {
+  it("does not run git commit on failure", async () => {
     const issue = createIssue(TEST_DB, {
       title: "Test issue",
       type: "feat",
@@ -282,8 +276,8 @@ describe("runVerifiedOrchestrator", () => {
 
     await runVerifiedOrchestrator(issue, makeConfig(executor));
 
-    const commitCalls = execCalls.filter((c) =>
-      c.command.includes("/magi/scripts/commit-push.sh"),
+    const commitCalls = execCalls.filter(
+      (c) => c.command.includes("git") && c.command.includes("commit"),
     );
     expect(commitCalls.length).toBe(0);
   });
