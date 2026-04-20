@@ -213,15 +213,51 @@ export async function runSandbox(
   };
 }
 
+async function getContainerState(
+  containerName: string,
+): Promise<"running" | "stopped" | "not-found"> {
+  const inspect = Bun.spawn(
+    ["docker", "inspect", "-f", "{{.State.Running}}", containerName],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const exitCode = await inspect.exited;
+  if (exitCode !== 0) return "not-found";
+  const running = (
+    await new Response(inspect.stdout as ReadableStream).text()
+  ).trim();
+  return running === "true" ? "running" : "stopped";
+}
+
 /**
  * Start a long-lived sandbox container in detached mode.
  * The container runs setup only (MODE=setup) and stays alive via sleep infinity.
+ * If a container with the same name is already running, reuses it.
+ * If a stopped container with the same name exists, removes it first.
  */
 export async function startSandbox(
   config: SandboxConfig,
 ): Promise<SandboxHandle> {
   const containerName = config.containerName ?? generateContainerName();
   const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+
+  const state = await getContainerState(containerName);
+
+  if (state === "running") {
+    await waitForSetup(containerName, timeout);
+    return {
+      containerName,
+      branch: config.branch,
+      baseBranch: config.baseBranch ?? "main",
+    };
+  }
+
+  if (state === "stopped") {
+    const rmProc = Bun.spawn(["docker", "rm", containerName], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await rmProc.exited;
+  }
 
   const oauthToken =
     config.oauthToken ?? process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";

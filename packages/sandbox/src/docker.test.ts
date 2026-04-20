@@ -23,6 +23,20 @@ function spawnArgs(spy: ReturnType<typeof spyOn>): string[] {
   return spy.mock.calls[0][0] as string[];
 }
 
+function dockerRunDArgs(spy: ReturnType<typeof spyOn>): string[] {
+  for (const call of spy.mock.calls) {
+    const args = call[0] as string[];
+    if (
+      args.includes("docker") &&
+      args.includes("run") &&
+      args.includes("-d")
+    ) {
+      return args;
+    }
+  }
+  return [];
+}
+
 function envArgs(args: string[]): Record<string, string> {
   const env: Record<string, string> = {};
   for (let i = 0; i < args.length - 1; i++) {
@@ -475,7 +489,7 @@ describe("startSandbox", () => {
 
   it("uses 'docker run -d' (detached) without --rm", async () => {
     await startSandbox({ ...baseConfig, containerName: "test-ctr" });
-    const args = spawnArgs(spy);
+    const args = dockerRunDArgs(spy);
     expect(args).toContain("docker");
     expect(args).toContain("run");
     expect(args).toContain("-d");
@@ -484,14 +498,14 @@ describe("startSandbox", () => {
 
   it("sets MODE=setup env var", async () => {
     await startSandbox({ ...baseConfig, containerName: "test-ctr" });
-    const args = spawnArgs(spy);
+    const args = dockerRunDArgs(spy);
     const env = envArgs(args);
     expect(env["MODE"]).toBe("setup");
   });
 
   it("does NOT pass PROMPT env var", async () => {
     await startSandbox({ ...baseConfig, containerName: "test-ctr" });
-    const args = spawnArgs(spy);
+    const args = dockerRunDArgs(spy);
     const env = envArgs(args);
     expect(env["PROMPT"]).toBeUndefined();
   });
@@ -521,7 +535,7 @@ describe("startSandbox", () => {
       containerName: "test-ctr",
       baseBranch: "develop",
     });
-    const args = spawnArgs(spy);
+    const args = dockerRunDArgs(spy);
     const env = envArgs(args);
     expect(env["BRANCH"]).toBe("test-branch");
     expect(env["BASE_BRANCH"]).toBe("develop");
@@ -529,8 +543,118 @@ describe("startSandbox", () => {
 
   it("mounts repo as read-only", async () => {
     await startSandbox({ ...baseConfig, containerName: "test-ctr" });
-    const args = spawnArgs(spy);
+    const args = dockerRunDArgs(spy);
     expect(args).toContain("/workspace/repo:/repo:ro");
+  });
+});
+
+// ── startSandbox container existence handling ──
+
+describe("startSandbox container existence handling", () => {
+  let spy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    delete process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+    delete process.env["GH_TOKEN"];
+    delete process.env["SSH_AUTH_SOCK"];
+  });
+
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  function makeContainerStateMock(state: "running" | "stopped" | "not-found") {
+    return spyOn(Bun, "spawn").mockImplementation((args) => {
+      const cmd = (args as string[]).join(" ");
+      if (cmd.includes("inspect") && cmd.includes("State.Running")) {
+        if (state === "not-found") {
+          return {
+            stdout: new Response("").body as ReadableStream,
+            stderr: new Response("").body as ReadableStream,
+            exited: Promise.resolve(1),
+            kill: () => {},
+          } as ReturnType<typeof Bun.spawn>;
+        }
+        return {
+          stdout: new Response(state === "running" ? "true\n" : "false\n")
+            .body as ReadableStream,
+          stderr: new Response("").body as ReadableStream,
+          exited: Promise.resolve(0),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      if (cmd.includes("test -f")) {
+        return {
+          stdout: null,
+          stderr: null,
+          exited: Promise.resolve(0),
+          kill: () => {},
+        } as ReturnType<typeof Bun.spawn>;
+      }
+      return {
+        stdout: new Response("container-id\n").body as ReadableStream,
+        stderr: new Response("").body as ReadableStream,
+        exited: Promise.resolve(0),
+        kill: () => {},
+      } as ReturnType<typeof Bun.spawn>;
+    });
+  }
+
+  it("creates new container when no existing container found", async () => {
+    spy = makeContainerStateMock("not-found");
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const runCall = spy.mock.calls.find((c) => {
+      const args = c[0] as string[];
+      return args.includes("run") && args.includes("-d");
+    });
+    expect(runCall).toBeTruthy();
+  });
+
+  it("removes stopped container before creating new one", async () => {
+    spy = makeContainerStateMock("stopped");
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const rmCall = spy.mock.calls.find((c) => {
+      const args = c[0] as string[];
+      return args.includes("rm") && args.includes("test-ctr");
+    });
+    expect(rmCall).toBeTruthy();
+    const runCall = spy.mock.calls.find((c) => {
+      const args = c[0] as string[];
+      return args.includes("run") && args.includes("-d");
+    });
+    expect(runCall).toBeTruthy();
+  });
+
+  it("does not create new container when existing container is running", async () => {
+    spy = makeContainerStateMock("running");
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const runCall = spy.mock.calls.find((c) => {
+      const args = c[0] as string[];
+      return args.includes("run");
+    });
+    expect(runCall).toBeUndefined();
+  });
+
+  it("returns correct handle when reusing running container", async () => {
+    spy = makeContainerStateMock("running");
+    const handle = await startSandbox({
+      ...baseConfig,
+      containerName: "test-ctr",
+      baseBranch: "develop",
+    });
+    expect(handle.containerName).toBe("test-ctr");
+    expect(handle.branch).toBe("test-branch");
+    expect(handle.baseBranch).toBe("develop");
+  });
+
+  it("calls waitForSetup when reusing running container", async () => {
+    spy = makeContainerStateMock("running");
+    await startSandbox({ ...baseConfig, containerName: "test-ctr" });
+    const setupCall = spy.mock.calls.find((c) => {
+      const args = c[0] as string[];
+      return args.includes("test") && args.includes("-f");
+    });
+    expect(setupCall).toBeTruthy();
   });
 });
 
