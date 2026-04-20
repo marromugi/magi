@@ -480,6 +480,48 @@ describe("runVerifiedOrchestrator", () => {
     });
   });
 
+  it("sets status to done when verification passes but no changes to commit", async () => {
+    const issue = createIssue(TEST_DB, {
+      title: "Already implemented",
+      type: "feat",
+      acceptance: "Feature works",
+      branch: "feat/1-test",
+    });
+
+    const executor: SandboxExecutor = {
+      start: async () => ({
+        containerName: "test-ctr",
+        branch: "feat/1-test",
+        baseBranch: "main",
+      }),
+      exec: async (_handle, command) => {
+        if (command.includes("--json-schema")) {
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify({
+              pass: true,
+              summary: "OK",
+              failures: [],
+            }),
+            stderr: "",
+          };
+        }
+        // git status --porcelain returns empty (no changes)
+        if (command.includes("git") && command.includes("--porcelain")) {
+          return { exitCode: 0, stdout: "", stderr: "" };
+        }
+        return { exitCode: 0, stdout: "impl output", stderr: "" };
+      },
+      stop: async () => {},
+    };
+
+    const result = await runVerifiedOrchestrator(issue, makeConfig(executor));
+
+    expect(result.success).toBe(true);
+    const updated = getIssue(TEST_DB, issue.id);
+    expect(updated?.status).toBe("done");
+  });
+
   it("passes --model flag when model is specified", async () => {
     const issue = createIssue(TEST_DB, {
       title: "Test issue",

@@ -288,17 +288,22 @@ export async function runVerifiedOrchestrator(
     }
 
     if (success) {
-      await commitAndPush({
+      const commitResult = await commitAndPush({
         handle,
         executor: config.executor,
         branch,
         commitMessage:
           issue.commit_message ?? "chore: automated changes by magi",
       });
-      updateIssue(config.dbPath, issue.id, {
-        status: "implemented",
-        branch,
-      });
+      if (commitResult.success) {
+        updateIssue(config.dbPath, issue.id, {
+          status: "implemented",
+          branch,
+        });
+      } else {
+        // Verification passed but no changes — already on main
+        updateIssue(config.dbPath, issue.id, { status: "done" });
+      }
     } else {
       updateIssue(config.dbPath, issue.id, {
         status: "failed",
