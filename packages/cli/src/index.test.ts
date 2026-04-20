@@ -2,8 +2,15 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { migrate, createIssue, updateIssue, closeDb } from "@magi/core";
+import {
+  migrate,
+  createIssue,
+  getIssue,
+  updateIssue,
+  closeDb,
+} from "@magi/core";
 import { parseDaemonFlags } from "./index.js";
+import { createDaemon } from "./daemon.js";
 
 function runCli(args: string[], dbPath: string) {
   const result = Bun.spawnSync({
@@ -16,6 +23,85 @@ function runCli(args: string[], dbPath: string) {
     exitCode: result.exitCode ?? 0,
   };
 }
+
+describe("daemon onFailure wiring (CLI path)", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(async () => {
+    closeDb();
+    tmpDir = await mkdtemp(join(tmpdir(), "magi-cli-daemon-test-"));
+    dbPath = join(tmpDir, "test.db");
+    migrate(dbPath);
+  });
+
+  afterEach(async () => {
+    closeDb();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("updates issue status to failed when runIssue throws", async () => {
+    const issue = createIssue(dbPath, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "some acceptance criteria",
+    });
+
+    const daemon = createDaemon({
+      interval: 60_000,
+      concurrency: 1,
+      fetchReadyIssues: () => [issue],
+      runIssue: async () => {
+        throw new Error("sandbox startup failed");
+      },
+      onFailure: (failedIssue, error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        updateIssue(dbPath, failedIssue.id, {
+          status: "failed",
+          failed_reason: reason,
+        });
+      },
+    });
+
+    daemon.start();
+    await daemon.stop();
+
+    const updated = getIssue(dbPath, issue.id);
+    expect(updated?.status).toBe("failed");
+    expect(updated?.failed_reason).toBe("sandbox startup failed");
+  });
+
+  test("does not leave issue in active status when runIssue throws", async () => {
+    const issue = createIssue(dbPath, {
+      title: "Test issue",
+      type: "feat",
+      acceptance: "some acceptance criteria",
+    });
+    updateIssue(dbPath, issue.id, { status: "active" });
+
+    const daemon = createDaemon({
+      interval: 60_000,
+      concurrency: 1,
+      fetchReadyIssues: () => [issue],
+      runIssue: async () => {
+        throw new Error("unexpected error");
+      },
+      onFailure: (failedIssue, error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        updateIssue(dbPath, failedIssue.id, {
+          status: "failed",
+          failed_reason: reason,
+        });
+      },
+    });
+
+    daemon.start();
+    await daemon.stop();
+
+    const updated = getIssue(dbPath, issue.id);
+    expect(updated?.status).toBe("failed");
+  });
+});
 
 describe("parseDaemonFlags", () => {
   test("enables review and PR by default", () => {

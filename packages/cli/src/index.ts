@@ -462,6 +462,13 @@ async function cmdDaemonStart(args: string[]) {
         throw new Error(`implementation failed for ${result.branch}`);
       }
     },
+    onFailure: (issue, error) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      updateIssue(dbPath, issue.id, {
+        status: "failed",
+        failed_reason: reason,
+      });
+    },
     logger,
   });
 

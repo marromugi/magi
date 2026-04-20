@@ -13,6 +13,7 @@ export interface DaemonOptions {
   fetchReadyIssues(): Issue[];
   runIssue(issue: Issue): Promise<void>;
   logger?: DaemonLogger;
+  onFailure?(issue: Issue, error: unknown): void;
 }
 
 export interface Daemon {
@@ -33,6 +34,7 @@ export function createDaemon(options: DaemonOptions): Daemon {
       options.logger?.complete(issue);
     } catch (error) {
       options.logger?.fail(issue, error);
+      options.onFailure?.(issue, error);
     } finally {
       active.delete(issue.id);
       // Immediately check for next ready issue instead of waiting for interval

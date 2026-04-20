@@ -16,6 +16,8 @@ function makeIssue(id: number): Issue {
     branch: null,
     commit_message: null,
     worktree_path: null,
+    session_id: null,
+    failed_reason: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -143,6 +145,47 @@ describe("startDaemon", () => {
     daemon.stop();
 
     expect(onError).toHaveBeenCalledWith(error);
+  });
+
+  test("marks issue as failed when dispatch throws", async () => {
+    const issue = makeIssue(1);
+    const deps = makeDeps([issue]);
+    const error = new Error("dispatch failed");
+    const dispatch = mock(async () => {
+      throw error;
+    });
+
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 500, dispatch },
+      deps,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    daemon.stop();
+
+    expect(deps.updateIssue).toHaveBeenCalledWith(":memory:", 1, {
+      status: "failed",
+      failed_reason: "dispatch failed",
+    });
+  });
+
+  test("records stringified failed_reason when dispatch throws non-Error", async () => {
+    const issue = makeIssue(1);
+    const deps = makeDeps([issue]);
+    const dispatch = mock(async () => {
+      throw "something went wrong";
+    });
+
+    const daemon = startDaemon(
+      { dbPath: ":memory:", intervalMs: 500, dispatch },
+      deps,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    daemon.stop();
+
+    expect(deps.updateIssue).toHaveBeenCalledWith(":memory:", 1, {
+      status: "failed",
+      failed_reason: "something went wrong",
+    });
   });
 
   test("can start without intervalMs using default", () => {

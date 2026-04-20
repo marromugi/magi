@@ -47,7 +47,14 @@ export function startDaemon(
       inFlight.add(issue.id);
       updateFn(dbPath, issue.id, { status: "active" });
       dispatch(issue)
-        .catch((err) => onError?.(err))
+        .catch((err) => {
+          const reason = err instanceof Error ? err.message : String(err);
+          updateFn(dbPath, issue.id, {
+            status: "failed",
+            failed_reason: reason,
+          });
+          onError?.(err);
+        })
         .finally(() => inFlight.delete(issue.id));
     }
   };

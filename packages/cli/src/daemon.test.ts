@@ -172,6 +172,24 @@ describe("createDaemon", () => {
     expect(failed).toEqual([issue]);
   });
 
+  it("calls onFailure with issue and error when runIssue throws", async () => {
+    const issue = makeIssue(1);
+    const error = new Error("run failed");
+    const onFailure = mock((_issue: Issue, _error: unknown) => {});
+    const daemon = createDaemon({
+      interval: 60_000,
+      concurrency: 1,
+      fetchReadyIssues: () => [issue],
+      runIssue: async () => {
+        throw error;
+      },
+      onFailure,
+    });
+    daemon.start();
+    await daemon.stop();
+    expect(onFailure).toHaveBeenCalledWith(issue, error);
+  });
+
   it("stops the polling timer after stop()", async () => {
     const fetchReadyIssues = mock(() => []);
     const daemon = createDaemon({
