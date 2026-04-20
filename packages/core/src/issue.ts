@@ -361,6 +361,9 @@ export function rebaseIssueBranch(
   const ls = exec("git", ["ls-remote", "--heads", "origin", issue.branch]);
   if (ls.stdout.trim() === "") return null;
 
+  // Ensure local branch tracks remote (may not exist locally if created in sandbox)
+  exec("git", ["checkout", "-B", issue.branch, `origin/${issue.branch}`]);
+
   const rebase = exec("git", ["rebase", "origin/main", issue.branch]);
   if (rebase.exitCode !== 0) {
     exec("git", ["rebase", "--abort"]);

@@ -752,7 +752,7 @@ describe("rebaseIssueBranch", () => {
     expect(rebaseCalls).toHaveLength(0);
   });
 
-  test("calls fetch, rebase, and force push on success and returns null", () => {
+  test("calls fetch, checkout, rebase, and force push on success and returns null", () => {
     const issue = createIssue(dbPath, {
       title: "T",
       type: "feat",
@@ -768,6 +768,11 @@ describe("rebaseIssueBranch", () => {
     const result = rebaseIssueBranch(dbPath, issue.id, exec);
     expect(result).toBeNull();
     expect(calls).toContainEqual({ cmd: "git", args: ["fetch", "origin"] });
+    // Should checkout the remote branch locally before rebasing
+    expect(calls).toContainEqual({
+      cmd: "git",
+      args: ["checkout", "-B", "feat/t", "origin/feat/t"],
+    });
     expect(calls).toContainEqual({
       cmd: "git",
       args: ["rebase", "origin/main", "feat/t"],
