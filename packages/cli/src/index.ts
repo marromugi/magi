@@ -89,6 +89,23 @@ function parseFlags(args: string[]): Record<string, string> {
   return flags;
 }
 
+export function parseDaemonFlags(args: string[]): {
+  intervalSec: number;
+  concurrency: number;
+  withReview: boolean;
+  withPR: boolean;
+  autoMerge: boolean;
+} {
+  const flags = parseFlags(args);
+  return {
+    intervalSec: Number(flags.interval ?? "30"),
+    concurrency: Number(flags.concurrency ?? "1"),
+    withReview: flags["no-review"] !== "true",
+    withPR: flags["no-pr"] !== "true",
+    autoMerge: flags["auto-merge"] === "true",
+  };
+}
+
 // ── Commands ──
 
 function cmdDbInit() {
@@ -382,12 +399,8 @@ async function cmdGenerateWorkflow(args: string[]) {
 }
 
 async function cmdDaemonStart(args: string[]) {
-  const flags = parseFlags(args);
-  const intervalSec = Number(flags.interval ?? "30");
-  const concurrency = Number(flags.concurrency ?? "1");
-  const withReview = flags.review === "true";
-  const withPR = flags.pr === "true";
-  const autoMerge = flags["auto-merge"] === "true";
+  const { intervalSec, concurrency, withReview, withPR, autoMerge } =
+    parseDaemonFlags(args);
 
   if (isNaN(intervalSec) || intervalSec <= 0)
     die("--interval must be a positive number");
@@ -805,4 +818,6 @@ async function main() {
   }
 }
 
-main().finally(() => closeDb());
+if (import.meta.main) {
+  main().finally(() => closeDb());
+}

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { migrate, createIssue, updateIssue, closeDb } from "@magi/core";
+import { parseDaemonFlags } from "./index.js";
 
 function runCli(args: string[], dbPath: string) {
   const result = Bun.spawnSync({
@@ -15,6 +16,40 @@ function runCli(args: string[], dbPath: string) {
     exitCode: result.exitCode ?? 0,
   };
 }
+
+describe("parseDaemonFlags", () => {
+  test("enables review and PR by default", () => {
+    const result = parseDaemonFlags([]);
+    expect(result.withReview).toBe(true);
+    expect(result.withPR).toBe(true);
+  });
+
+  test("disables review with --no-review", () => {
+    const result = parseDaemonFlags(["--no-review"]);
+    expect(result.withReview).toBe(false);
+  });
+
+  test("disables PR with --no-pr", () => {
+    const result = parseDaemonFlags(["--no-pr"]);
+    expect(result.withPR).toBe(false);
+  });
+
+  test("keeps auto-merge false by default", () => {
+    const result = parseDaemonFlags([]);
+    expect(result.autoMerge).toBe(false);
+  });
+
+  test("enables auto-merge with --auto-merge", () => {
+    const result = parseDaemonFlags(["--auto-merge"]);
+    expect(result.autoMerge).toBe(true);
+  });
+
+  test("disables both review and PR together", () => {
+    const result = parseDaemonFlags(["--no-review", "--no-pr"]);
+    expect(result.withReview).toBe(false);
+    expect(result.withPR).toBe(false);
+  });
+});
 
 describe("issue add-dep", () => {
   let tmpDir: string;
