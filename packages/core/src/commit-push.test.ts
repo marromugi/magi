@@ -34,10 +34,8 @@ function makeFakeExecutor(opts?: {
     exec: async (_handle, command) => {
       execCalls.push({ command });
 
-      const cmd = command.join(" ");
-
       // git status --porcelain
-      if (cmd.includes("git status --porcelain")) {
+      if (command.includes("status") && command.includes("--porcelain")) {
         return {
           exitCode: 0,
           stdout: hasChanges ? " M src/index.ts\n" : "",
@@ -45,8 +43,8 @@ function makeFakeExecutor(opts?: {
         };
       }
 
-      // bun run format
-      if (cmd.includes("bun run format")) {
+      // bun run format (via sh -c)
+      if (command.some((c) => c.includes("bun run format"))) {
         return {
           exitCode: formatFails ? 1 : 0,
           stdout: "",
@@ -55,17 +53,17 @@ function makeFakeExecutor(opts?: {
       }
 
       // git add -A
-      if (cmd.includes("git add -A")) {
+      if (command.includes("add") && command.includes("-A")) {
         return { exitCode: 0, stdout: "", stderr: "" };
       }
 
       // git commit
-      if (cmd.includes("git commit")) {
+      if (command.includes("commit")) {
         return { exitCode: 0, stdout: "", stderr: "" };
       }
 
       // git remote get-url origin
-      if (cmd.includes("git remote get-url origin")) {
+      if (command.includes("remote") && command.includes("get-url")) {
         return {
           exitCode: hasRemote ? 0 : 1,
           stdout: hasRemote ? "https://github.com/test/repo.git" : "",
@@ -74,7 +72,7 @@ function makeFakeExecutor(opts?: {
       }
 
       // git push
-      if (cmd.includes("git push")) {
+      if (command.includes("push")) {
         return {
           exitCode: pushFails ? 1 : 0,
           stdout: "",
@@ -110,14 +108,15 @@ describe("commitAndPush", () => {
 
     expect(result.success).toBe(true);
 
-    const commands = execCalls.map((c) => c.command.join(" "));
-    expect(commands.some((c) => c.includes("git status --porcelain"))).toBe(
-      true,
-    );
-    expect(commands.some((c) => c.includes("bun run format"))).toBe(true);
-    expect(commands.some((c) => c.includes("git add -A"))).toBe(true);
-    expect(commands.some((c) => c.includes("git commit"))).toBe(true);
-    expect(commands.some((c) => c.includes("git push"))).toBe(true);
+    expect(execCalls.some((c) => c.command.includes("--porcelain"))).toBe(true);
+    expect(
+      execCalls.some((c) =>
+        c.command.some((a) => a.includes("bun run format")),
+      ),
+    ).toBe(true);
+    expect(execCalls.some((c) => c.command.includes("-A"))).toBe(true);
+    expect(execCalls.some((c) => c.command.includes("commit"))).toBe(true);
+    expect(execCalls.some((c) => c.command.includes("push"))).toBe(true);
   });
 
   it("uses the provided commit message", async () => {
@@ -126,9 +125,7 @@ describe("commitAndPush", () => {
       makeConfig(executor, { commitMessage: "fix: something" }),
     );
 
-    const commitCall = execCalls.find((c) =>
-      c.command.join(" ").includes("git commit"),
-    );
+    const commitCall = execCalls.find((c) => c.command.includes("commit"));
     expect(commitCall?.command).toContain("fix: something");
   });
 
@@ -144,8 +141,7 @@ describe("commitAndPush", () => {
     const result = await commitAndPush(makeConfig(executor));
 
     expect(result.success).toBe(true);
-    const commands = execCalls.map((c) => c.command.join(" "));
-    expect(commands.some((c) => c.includes("git push"))).toBe(false);
+    expect(execCalls.some((c) => c.command.includes("push"))).toBe(false);
   });
 
   it("continues when format fails", async () => {
@@ -153,8 +149,7 @@ describe("commitAndPush", () => {
     const result = await commitAndPush(makeConfig(executor));
 
     expect(result.success).toBe(true);
-    const commands = execCalls.map((c) => c.command.join(" "));
-    expect(commands.some((c) => c.includes("git commit"))).toBe(true);
+    expect(execCalls.some((c) => c.command.includes("commit"))).toBe(true);
   });
 
   it("returns success=false when push fails", async () => {

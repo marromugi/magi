@@ -1,5 +1,7 @@
 import type { SandboxExecutor, SandboxHandle } from "./orchestrator.js";
 
+const REPO_DIR = "/workspace/repo";
+
 export interface CommitPushConfig {
   handle: SandboxHandle;
   executor: SandboxExecutor;
@@ -19,37 +21,44 @@ async function exec(
   return executor.exec(handle, command);
 }
 
+function git(...args: string[]): string[] {
+  return ["git", "-C", REPO_DIR, ...args];
+}
+
 export async function commitAndPush(
   config: CommitPushConfig,
 ): Promise<CommitPushResult> {
   const { handle, executor, branch, commitMessage } = config;
 
   // Check for changes
-  const status = await exec(executor, handle, ["git", "status", "--porcelain"]);
+  const status = await exec(executor, handle, git("status", "--porcelain"));
   if (!status.stdout.trim()) {
     return { success: false };
   }
 
-  // Format (best-effort)
-  await exec(executor, handle, ["bun", "run", "format"]);
+  // Format (best-effort, run in repo dir via sh -c)
+  await exec(executor, handle, [
+    "sh",
+    "-c",
+    `cd ${REPO_DIR} && bun run format`,
+  ]);
 
   // Stage & commit
-  await exec(executor, handle, ["git", "add", "-A"]);
-  await exec(executor, handle, ["git", "commit", "-m", commitMessage]);
+  await exec(executor, handle, git("add", "-A"));
+  await exec(executor, handle, git("commit", "-m", commitMessage));
 
   // Check remote
-  const remote = await exec(executor, handle, [
-    "git",
-    "remote",
-    "get-url",
-    "origin",
-  ]);
+  const remote = await exec(
+    executor,
+    handle,
+    git("remote", "get-url", "origin"),
+  );
   if (remote.exitCode !== 0) {
     return { success: true };
   }
 
   // Push
-  const push = await exec(executor, handle, ["git", "push", "origin", branch]);
+  const push = await exec(executor, handle, git("push", "origin", branch));
   if (push.exitCode !== 0) {
     return { success: false };
   }
