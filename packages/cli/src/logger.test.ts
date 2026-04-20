@@ -1,7 +1,8 @@
 import { describe, expect, it, spyOn, beforeEach, afterEach } from "bun:test";
-import type { Issue } from "@magi/core";
+import type { Issue, VerifyJudgment } from "@magi/core";
 import {
   createRichLogger,
+  createIterationLogger,
   streamWithPrefix,
   logDaemonStart,
   logDaemonReady,
@@ -229,5 +230,92 @@ describe("lifecycle banners", () => {
 
     const output = allOutput();
     expect(output).toContain("stopped");
+  });
+});
+
+describe("createIterationLogger", () => {
+  let writeSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    writeSpy.mockRestore();
+  });
+
+  function allOutput(): string {
+    return writeSpy.mock.calls.map((c: unknown[]) => c[0] as string).join("");
+  }
+
+  it("onAttemptStart outputs issue id, attempt N/M, and 'impl'", () => {
+    const issue = makeIssue(10);
+    const logger = createIterationLogger(issue);
+    logger.onAttemptStart?.(1, 3);
+
+    const output = allOutput();
+    expect(output).toContain("#10");
+    expect(output).toContain("1/3");
+    expect(output).toContain("impl");
+  });
+
+  it("onVerifyJudgment outputs issue id, attempt N/M, and 'verify' on pass", () => {
+    const issue = makeIssue(10);
+    const logger = createIterationLogger(issue);
+    const judgment: VerifyJudgment = {
+      pass: true,
+      summary: "all good",
+      failures: [],
+    };
+    logger.onVerifyJudgment?.(2, 3, judgment);
+
+    const output = allOutput();
+    expect(output).toContain("#10");
+    expect(output).toContain("2/3");
+    expect(output).toContain("verify");
+  });
+
+  it("onVerifyJudgment includes failures when judgment fails", () => {
+    const issue = makeIssue(7);
+    const logger = createIterationLogger(issue);
+    const judgment: VerifyJudgment = {
+      pass: false,
+      summary: "tests failed",
+      failures: ["test A failed", "test B failed"],
+    };
+    logger.onVerifyJudgment?.(1, 3, judgment);
+
+    const output = allOutput();
+    expect(output).toContain("test A failed");
+    expect(output).toContain("test B failed");
+  });
+
+  it("onVerifyJudgment does not output failures list when judgment passes", () => {
+    const issue = makeIssue(7);
+    const logger = createIterationLogger(issue);
+    const judgment: VerifyJudgment = {
+      pass: true,
+      summary: "all good",
+      failures: [],
+    };
+    logger.onVerifyJudgment?.(1, 3, judgment);
+
+    expect(writeSpy.mock.calls.length).toBe(1);
+  });
+
+  it("onRetry outputs issue id, attempt N/M, and 'retry'", () => {
+    const issue = makeIssue(10);
+    const logger = createIterationLogger(issue);
+    const judgment: VerifyJudgment = {
+      pass: false,
+      summary: "not done",
+      failures: [],
+    };
+    logger.onRetry?.(1, 3, judgment);
+
+    const output = allOutput();
+    expect(output).toContain("#10");
+    expect(output).toContain("1/3");
+    expect(output).toContain("retry");
   });
 });

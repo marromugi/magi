@@ -1,4 +1,9 @@
-import type { Issue, ReviewSchedule } from "@magi/core";
+import type {
+  Issue,
+  ReviewSchedule,
+  OrchestratorLogger,
+  VerifyJudgment,
+} from "@magi/core";
 import type { DaemonLogger } from "./daemon.js";
 import type { ReviewPollerLogger } from "./review-poller.js";
 import type { PRPollerLogger } from "./pr-poller.js";
@@ -153,6 +158,39 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       writeln(`  ${c(String(error), style.red)}`);
       writeln(separator(issue));
       writeln("");
+    },
+  };
+}
+
+// ── OrchestratorLogger implementation ──
+
+export function createIterationLogger(issue: Issue): OrchestratorLogger {
+  return {
+    onAttemptStart(attempt: number, maxAttempts: number) {
+      writeln(
+        `${timestamp()} ${issueTag(issue)} attempt ${attempt}/${maxAttempts}: ${c("impl", style.blue)}`,
+      );
+    },
+
+    onVerifyJudgment(
+      attempt: number,
+      maxAttempts: number,
+      judgment: VerifyJudgment,
+    ) {
+      writeln(
+        `${timestamp()} ${issueTag(issue)} attempt ${attempt}/${maxAttempts}: ${c("verify", judgment.pass ? style.green : style.yellow)}`,
+      );
+      if (!judgment.pass) {
+        for (const f of judgment.failures) {
+          writeln(`  ${c(f, style.dim)}`);
+        }
+      }
+    },
+
+    onRetry(attempt: number, maxAttempts: number) {
+      writeln(
+        `${timestamp()} ${issueTag(issue)} attempt ${attempt}/${maxAttempts}: ${c("retry", style.magenta)}`,
+      );
     },
   };
 }

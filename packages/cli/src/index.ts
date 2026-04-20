@@ -47,6 +47,7 @@ import { createReviewPoller } from "./review-poller.js";
 import { createPRPoller } from "./pr-poller.js";
 import {
   createRichLogger,
+  createIterationLogger,
   createReviewLogger,
   createPRLogger,
   streamWithPrefix,
@@ -454,6 +455,7 @@ async function cmdDaemonStart(args: string[]) {
         baseBranch: "main",
         maxRetries: 5,
         executor,
+        logger: createIterationLogger(issue),
       });
 
       if (!result.success) {
