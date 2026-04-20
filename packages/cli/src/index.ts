@@ -44,9 +44,11 @@ import { formatReviewAsMarkdown } from "./review-formatter";
 import { validateIssue, runImplement } from "./implement.js";
 import { createDaemon } from "./daemon.js";
 import { createReviewPoller } from "./review-poller.js";
+import { createPRPoller } from "./pr-poller.js";
 import {
   createRichLogger,
   createReviewLogger,
+  createPRLogger,
   streamWithPrefix,
   logDaemonStart,
   logDaemonReady,
@@ -384,6 +386,8 @@ async function cmdDaemonStart(args: string[]) {
   const intervalSec = Number(flags.interval ?? "30");
   const concurrency = Number(flags.concurrency ?? "1");
   const withReview = flags.review === "true";
+  const withPR = flags.pr === "true";
+  const autoMerge = flags["auto-merge"] === "true";
 
   if (isNaN(intervalSec) || intervalSec <= 0)
     die("--interval must be a positive number");
@@ -467,14 +471,27 @@ async function cmdDaemonStart(args: string[]) {
       })
     : null;
 
+  const prPoller = withPR
+    ? createPRPoller({
+        interval: intervalSec * 1000,
+        runQueue: () => processPRQueue({ dbPath, autoMerge }),
+        logger: createPRLogger(),
+      })
+    : null;
+
   daemon.start();
   reviewPoller?.start();
+  prPoller?.start();
   logDaemonReady();
 
   await new Promise<void>((resolve) => {
     process.on("SIGINT", async () => {
       logDaemonShutdown();
-      await Promise.all([daemon.stop(), reviewPoller?.stop()]);
+      await Promise.all([
+        daemon.stop(),
+        reviewPoller?.stop(),
+        prPoller?.stop(),
+      ]);
       logDaemonStopped();
       resolve();
     });

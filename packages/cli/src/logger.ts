@@ -1,6 +1,7 @@
 import type { Issue, ReviewSchedule } from "@magi/core";
 import type { DaemonLogger } from "./daemon.js";
 import type { ReviewPollerLogger } from "./review-poller.js";
+import type { PRPollerLogger } from "./pr-poller.js";
 
 // ── ANSI escape codes ──
 
@@ -184,6 +185,40 @@ export function createReviewLogger(): ReviewPollerLogger {
       startTimes.delete(schedule.id);
       writeln(
         `${timestamp()} ${c("✗", style.bold, style.red)} ${c("Review failed", style.bold, style.red)} ${c(`#${schedule.id}`, style.bold, style.cyan)} ${dur}`,
+      );
+      writeln(`  ${c(String(error), style.red)}`);
+    },
+  };
+}
+
+// ── PRPollerLogger implementation ──
+
+export function createPRLogger(): PRPollerLogger {
+  let startTime: number | null = null;
+
+  return {
+    start() {
+      startTime = Date.now();
+      writeln(
+        `${timestamp()} ${c("▶", style.bold, style.blue)} ${c("PR queue processing", style.bold)}`,
+      );
+    },
+
+    complete() {
+      const dur =
+        startTime !== null ? c(`(${elapsed(startTime)})`, style.dim) : "";
+      startTime = null;
+      writeln(
+        `${timestamp()} ${c("✓", style.bold, style.green)} ${c("PR queue done", style.bold, style.green)} ${dur}`,
+      );
+    },
+
+    fail(error: unknown) {
+      const dur =
+        startTime !== null ? c(`(${elapsed(startTime)})`, style.dim) : "";
+      startTime = null;
+      writeln(
+        `${timestamp()} ${c("✗", style.bold, style.red)} ${c("PR queue failed", style.bold, style.red)} ${dur}`,
       );
       writeln(`  ${c(String(error), style.red)}`);
     },
