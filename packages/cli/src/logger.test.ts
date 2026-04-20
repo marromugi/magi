@@ -9,6 +9,8 @@ import {
   logDaemonShutdown,
   logDaemonStopped,
 } from "./logger.js";
+import { LogEventBus } from "./log-event-bus.js";
+import type { LogEvent } from "./log-event-bus.js";
 
 function makeIssue(id: number, overrides?: Partial<Issue>): Issue {
   return {
@@ -230,6 +232,143 @@ describe("lifecycle banners", () => {
 
     const output = allOutput();
     expect(output).toContain("stopped");
+  });
+});
+
+describe("createRichLogger with event bus", () => {
+  let writeSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    writeSpy.mockRestore();
+  });
+
+  it("detect emits event to bus with correct structure", () => {
+    const bus = new LogEventBus();
+    const events: LogEvent[] = [];
+    bus.subscribe((e) => events.push(e));
+
+    const logger = createRichLogger(bus);
+    const issue = makeIssue(42);
+    logger.detect(issue);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("detect");
+    expect(events[0]!.issueId).toBe(42);
+    expect(typeof events[0]!.timestamp).toBe("string");
+    expect(events[0]!.payload).toHaveProperty("title");
+  });
+
+  it("start emits event to bus", () => {
+    const bus = new LogEventBus();
+    const events: LogEvent[] = [];
+    bus.subscribe((e) => events.push(e));
+
+    const logger = createRichLogger(bus);
+    logger.start(makeIssue(1));
+
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("start");
+    expect(events[0]!.issueId).toBe(1);
+  });
+
+  it("complete emits event to bus with elapsedMs in payload", () => {
+    const bus = new LogEventBus();
+    const events: LogEvent[] = [];
+    bus.subscribe((e) => events.push(e));
+
+    const logger = createRichLogger(bus);
+    const issue = makeIssue(3);
+    logger.start(issue);
+    events.length = 0;
+    logger.complete(issue);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("complete");
+    expect(events[0]!.issueId).toBe(3);
+    expect(typeof (events[0]!.payload as { elapsedMs: number }).elapsedMs).toBe(
+      "number",
+    );
+  });
+
+  it("fail emits event to bus with error in payload", () => {
+    const bus = new LogEventBus();
+    const events: LogEvent[] = [];
+    bus.subscribe((e) => events.push(e));
+
+    const logger = createRichLogger(bus);
+    logger.fail(makeIssue(5), new Error("sandbox crashed"));
+
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("fail");
+    expect(events[0]!.issueId).toBe(5);
+    expect(events[0]!.payload).toHaveProperty(
+      "error",
+      "Error: sandbox crashed",
+    );
+  });
+
+  it("still writes to stdout when bus is provided", () => {
+    const bus = new LogEventBus();
+    const logger = createRichLogger(bus);
+    logger.detect(makeIssue(42));
+
+    expect(writeSpy).toHaveBeenCalled();
+  });
+
+  it("does not throw when no bus is provided", () => {
+    const logger = createRichLogger();
+    expect(() => logger.detect(makeIssue(1))).not.toThrow();
+  });
+});
+
+describe("streamWithPrefix with event bus", () => {
+  let writeSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    writeSpy.mockRestore();
+  });
+
+  it("emits stream events for each line when bus is provided", async () => {
+    const bus = new LogEventBus();
+    const events: LogEvent[] = [];
+    bus.subscribe((e) => events.push(e));
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("line one\nline two\n"));
+        controller.close();
+      },
+    });
+
+    await streamWithPrefix(stream, 7, bus);
+
+    expect(events).toHaveLength(2);
+    expect(events[0]!.type).toBe("stream");
+    expect(events[0]!.issueId).toBe(7);
+    expect((events[0]!.payload as { line: string }).line).toBe("line one");
+    expect((events[1]!.payload as { line: string }).line).toBe("line two");
+  });
+
+  it("does not emit stream events when no bus is provided", async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("hello\n"));
+        controller.close();
+      },
+    });
+
+    // Should not throw
+    await expect(streamWithPrefix(stream, 1)).resolves.toBe("hello\n");
   });
 });
 

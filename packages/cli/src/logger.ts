@@ -7,6 +7,7 @@ import type {
 import type { DaemonLogger } from "./daemon.js";
 import type { ReviewPollerLogger } from "./review-poller.js";
 import type { PRPollerLogger } from "./pr-poller.js";
+import { type LogEventBus } from "./log-event-bus.js";
 
 // ── ANSI escape codes ──
 
@@ -76,6 +77,7 @@ function elapsed(startTime: number): string {
 export async function streamWithPrefix(
   stream: ReadableStream<Uint8Array> | null,
   issueId: number,
+  bus?: LogEventBus,
 ): Promise<string> {
   if (!stream) return "";
 
@@ -99,12 +101,24 @@ export async function streamWithPrefix(
 
     for (const line of lines) {
       process.stdout.write(`${prefix}${line}\n`);
+      bus?.emit({
+        timestamp: new Date().toISOString(),
+        issueId,
+        type: "stream",
+        payload: { line },
+      });
     }
   }
 
   // Flush remaining buffer
   if (buffer.length > 0) {
     process.stdout.write(`${prefix}${buffer}\n`);
+    bus?.emit({
+      timestamp: new Date().toISOString(),
+      issueId,
+      type: "stream",
+      payload: { line: buffer },
+    });
   }
 
   return collected;
@@ -116,7 +130,9 @@ export interface RichLoggerState {
   startTimes: Map<number, number>;
 }
 
-export function createRichLogger(): DaemonLogger & RichLoggerState {
+export function createRichLogger(
+  bus?: LogEventBus,
+): DaemonLogger & RichLoggerState {
   const startTimes = new Map<number, number>();
 
   return {
@@ -126,6 +142,12 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       writeln(
         `${timestamp()} ${c("◆", style.yellow)} ${c("Detected", style.yellow)} ${issueTag(issue)} ${c(issue.title, style.dim)}`,
       );
+      bus?.emit({
+        timestamp: new Date().toISOString(),
+        issueId: issue.id,
+        type: "detect",
+        payload: { title: issue.title },
+      });
     },
 
     start(issue: Issue) {
@@ -135,10 +157,17 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       writeln(
         `${timestamp()} ${c("▶", style.bold, style.blue)} ${c("Starting", style.bold)} ${issueTag(issue)} ${issue.title}`,
       );
+      bus?.emit({
+        timestamp: new Date().toISOString(),
+        issueId: issue.id,
+        type: "start",
+        payload: { title: issue.title },
+      });
     },
 
     complete(issue: Issue) {
       const start = startTimes.get(issue.id);
+      const elapsedMs = start !== undefined ? Date.now() - start : 0;
       const dur = start ? c(`(${elapsed(start)})`, style.dim) : "";
       startTimes.delete(issue.id);
       writeln(
@@ -146,10 +175,17 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       );
       writeln(separator(issue));
       writeln("");
+      bus?.emit({
+        timestamp: new Date().toISOString(),
+        issueId: issue.id,
+        type: "complete",
+        payload: { title: issue.title, elapsedMs },
+      });
     },
 
     fail(issue: Issue, error: unknown) {
       const start = startTimes.get(issue.id);
+      const elapsedMs = start !== undefined ? Date.now() - start : 0;
       const dur = start ? c(`(${elapsed(start)})`, style.dim) : "";
       startTimes.delete(issue.id);
       writeln(
@@ -158,6 +194,12 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       writeln(`  ${c(String(error), style.red)}`);
       writeln(separator(issue));
       writeln("");
+      bus?.emit({
+        timestamp: new Date().toISOString(),
+        issueId: issue.id,
+        type: "fail",
+        payload: { title: issue.title, elapsedMs, error: String(error) },
+      });
     },
   };
 }
