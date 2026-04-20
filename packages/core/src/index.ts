@@ -41,6 +41,7 @@ export {
   type OrchestratorResult,
   type SandboxExecutor,
   type VerifiedOrchestratorConfig,
+  type OrchestratorLogger,
   buildPrompt,
   runImplementOrchestrator,
   runVerifiedOrchestrator,
