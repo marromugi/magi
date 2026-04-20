@@ -1,5 +1,6 @@
-import type { Issue } from "@magi/core";
+import type { Issue, ReviewSchedule } from "@magi/core";
 import type { DaemonLogger } from "./daemon.js";
+import type { ReviewPollerLogger } from "./review-poller.js";
 
 // ── ANSI escape codes ──
 
@@ -151,6 +152,40 @@ export function createRichLogger(): DaemonLogger & RichLoggerState {
       writeln(`  ${c(String(error), style.red)}`);
       writeln(separator(issue));
       writeln("");
+    },
+  };
+}
+
+// ── ReviewPollerLogger implementation ──
+
+export function createReviewLogger(): ReviewPollerLogger {
+  const startTimes = new Map<number, number>();
+
+  return {
+    start(schedule: ReviewSchedule) {
+      startTimes.set(schedule.id, Date.now());
+      writeln(
+        `${timestamp()} ${c("▶", style.bold, style.blue)} ${c("Review starting", style.bold)} ${c(`#${schedule.id}`, style.bold, style.cyan)} ${c(schedule.cron_expr, style.dim)}`,
+      );
+    },
+
+    complete(schedule: ReviewSchedule) {
+      const start = startTimes.get(schedule.id);
+      const dur = start ? c(`(${elapsed(start)})`, style.dim) : "";
+      startTimes.delete(schedule.id);
+      writeln(
+        `${timestamp()} ${c("✓", style.bold, style.green)} ${c("Review completed", style.bold, style.green)} ${c(`#${schedule.id}`, style.bold, style.cyan)} ${dur}`,
+      );
+    },
+
+    fail(schedule: ReviewSchedule, error: unknown) {
+      const start = startTimes.get(schedule.id);
+      const dur = start ? c(`(${elapsed(start)})`, style.dim) : "";
+      startTimes.delete(schedule.id);
+      writeln(
+        `${timestamp()} ${c("✗", style.bold, style.red)} ${c("Review failed", style.bold, style.red)} ${c(`#${schedule.id}`, style.bold, style.cyan)} ${dur}`,
+      );
+      writeln(`  ${c(String(error), style.red)}`);
     },
   };
 }

@@ -32,6 +32,8 @@ import {
   listPRQueue,
   closeDb,
   processPRQueue,
+  shouldRun,
+  runReview,
   type IssueType,
   type IssuePriority,
   type IssueStatus,
@@ -41,8 +43,10 @@ import {
 import { formatReviewAsMarkdown } from "./review-formatter";
 import { validateIssue, runImplement } from "./implement.js";
 import { createDaemon } from "./daemon.js";
+import { createReviewPoller } from "./review-poller.js";
 import {
   createRichLogger,
+  createReviewLogger,
   streamWithPrefix,
   logDaemonStart,
   logDaemonReady,
@@ -379,6 +383,7 @@ async function cmdDaemonStart(args: string[]) {
   const flags = parseFlags(args);
   const intervalSec = Number(flags.interval ?? "30");
   const concurrency = Number(flags.concurrency ?? "1");
+  const withReview = flags.review === "true";
 
   if (isNaN(intervalSec) || intervalSec <= 0)
     die("--interval must be a positive number");
@@ -441,13 +446,35 @@ async function cmdDaemonStart(args: string[]) {
     logger,
   });
 
+  const reviewPoller = withReview
+    ? createReviewPoller({
+        interval: intervalSec * 1000,
+        fetchDueSchedules: () => {
+          const now = new Date();
+          return listReviewSchedules(dbPath).filter(
+            (s) => s.enabled && shouldRun(s.cron_expr, s.last_reviewed_at, now),
+          );
+        },
+        runSchedule: async (schedule) => {
+          const result = await runReview({ dbPath, repoPath, schedule });
+          if (result.skipped) {
+            process.stdout.write(
+              `[review] schedule #${schedule.id} skipped (no new commits)\n`,
+            );
+          }
+        },
+        logger: createReviewLogger(),
+      })
+    : null;
+
   daemon.start();
+  reviewPoller?.start();
   logDaemonReady();
 
   await new Promise<void>((resolve) => {
     process.on("SIGINT", async () => {
       logDaemonShutdown();
-      await daemon.stop();
+      await Promise.all([daemon.stop(), reviewPoller?.stop()]);
       logDaemonStopped();
       resolve();
     });
