@@ -1,4 +1,4 @@
-import type { AuthEnv } from "@magi/auth";
+import type { KVProvider } from "@magi/kv";
 
 export type {
   Device,
@@ -8,4 +8,7 @@ export type {
   PairingRequest,
 } from "@magi/auth";
 
-export interface Env extends AuthEnv {}
+export interface Env {
+  ADMIN_API_KEY: string;
+  deviceStorage: KVProvider;
+}

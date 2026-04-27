@@ -1,35 +1,54 @@
-import { describe, it, expect } from "vitest";
-import { env } from "cloudflare:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { mkdtemp, rm } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { FilesystemStorage } from "@magi/kv/providers/filesystem";
 import app from "../index";
+import type { Env } from "../types";
 
 const ADMIN_KEY = "test-admin-key";
-const adminEnv = { ...env, ADMIN_API_KEY: ADMIN_KEY };
 const authHeader = { Authorization: `Bearer ${ADMIN_KEY}` };
+let tempDir: string;
+let env: Env;
+
+beforeEach(async () => {
+  tempDir = await mkdtemp(join(tmpdir(), "magi-gw-"));
+  env = {
+    ADMIN_API_KEY: ADMIN_KEY,
+    deviceStorage: new FilesystemStorage(tempDir),
+  };
+});
+
+afterEach(async () => {
+  await rm(tempDir, { recursive: true });
+});
 
 describe("POST /pair", () => {
   it("exchanges bootstrap token for device token", async () => {
     const inviteRes = await app.request(
       "/admin/devices/invite",
       { method: "POST", headers: authHeader },
-      adminEnv,
+      env,
     );
-    const { bootstrapToken } = await inviteRes.json();
+    const { bootstrapToken } = (await inviteRes.json()) as {
+      bootstrapToken: string;
+    };
 
     const res = await app.request(
       "/pair",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bootstrapToken,
-          deviceName: "new-device",
-        }),
+        body: JSON.stringify({ bootstrapToken, deviceName: "new-device" }),
       },
-      adminEnv,
+      env,
     );
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as {
+      deviceToken: string;
+      deviceId: string;
+    };
     expect(body.deviceToken).toMatch(/^[0-9a-f]{64}$/);
     expect(body.deviceId).toBeTruthy();
   });
@@ -45,11 +64,11 @@ describe("POST /pair", () => {
           deviceName: "device",
         }),
       },
-      adminEnv,
+      env,
     );
 
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBeTruthy();
   });
 
@@ -61,7 +80,7 @@ describe("POST /pair", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       },
-      adminEnv,
+      env,
     );
 
     expect(res.status).toBe(400);
@@ -71,32 +90,30 @@ describe("POST /pair", () => {
     const inviteRes = await app.request(
       "/admin/devices/invite",
       { method: "POST", headers: authHeader },
-      adminEnv,
+      env,
     );
-    const { bootstrapToken } = await inviteRes.json();
+    const { bootstrapToken } = (await inviteRes.json()) as {
+      bootstrapToken: string;
+    };
 
     const pairRes = await app.request(
       "/pair",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bootstrapToken,
-          deviceName: "auth-test",
-        }),
+        body: JSON.stringify({ bootstrapToken, deviceName: "auth-test" }),
       },
-      adminEnv,
+      env,
     );
-    const { deviceToken } = await pairRes.json();
+    const { deviceToken } = (await pairRes.json()) as { deviceToken: string };
 
-    // Use device token to access protected endpoint
     const res = await app.request(
       "/api/me",
       { headers: { Authorization: `Bearer ${deviceToken}` } },
-      adminEnv,
+      env,
     );
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { device: { name: string } };
     expect(body.device.name).toBe("auth-test");
   });
 });
