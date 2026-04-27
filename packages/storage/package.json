@@ -1,0 +1,15 @@
+{
+  "name": "@magi/storage",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./providers/filesystem": "./src/providers/filesystem.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
