@@ -19,8 +19,3 @@ export interface PairingRequest {
   expiresAt: string;
   used: boolean;
 }
-
-export interface AuthEnv {
-  DEVICES: KVNamespace;
-  ADMIN_API_KEY: string;
-}

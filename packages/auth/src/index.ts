@@ -12,5 +12,4 @@ export type {
   DeviceStatus,
   TokenHash,
   PairingRequest,
-  AuthEnv,
 } from "./types";

@@ -10,15 +10,13 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "bun test"
   },
   "dependencies": {
+    "@magi/kv": "workspace:*",
     "hono": "^4.7.10"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.9.0",
-    "@cloudflare/workers-types": "^4.20250522.0",
-    "vitest": "^3.2.1",
-    "wrangler": "^4.21.1"
+    "@types/bun": "latest"
   }
 }

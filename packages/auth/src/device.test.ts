@@ -1,12 +1,21 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { env } from "cloudflare:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { mkdtemp, rm } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { FilesystemStorage } from "@magi/kv/providers/filesystem";
 import { DeviceStore } from "./device";
 
 describe("DeviceStore", () => {
+  let tempDir: string;
   let store: DeviceStore;
 
-  beforeEach(() => {
-    store = new DeviceStore(env.DEVICES);
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "magi-auth-"));
+    store = new DeviceStore(new FilesystemStorage(tempDir));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
   });
 
   describe("createInvite", () => {
@@ -39,7 +48,7 @@ describe("DeviceStore", () => {
     });
 
     it("rejects an invalid bootstrap token", async () => {
-      await expect(
+      expect(
         store.pair({
           bootstrapToken: "invalid-token",
           deviceName: "test",
@@ -54,7 +63,7 @@ describe("DeviceStore", () => {
         deviceName: "device-1",
       });
 
-      await expect(
+      expect(
         store.pair({
           bootstrapToken: invite.bootstrapToken,
           deviceName: "device-2",
@@ -66,7 +75,7 @@ describe("DeviceStore", () => {
       const invite = await store.createInvite({ ttlMs: 1 });
       await new Promise((r) => setTimeout(r, 10));
 
-      await expect(
+      expect(
         store.pair({
           bootstrapToken: invite.bootstrapToken,
           deviceName: "test",

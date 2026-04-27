@@ -1,3 +1,4 @@
+import type { KVProvider } from "@magi/kv";
 import type { Device, PairingRequest } from "./types";
 import {
   generateToken,
@@ -14,7 +15,7 @@ const KV_PREFIX = {
 } as const;
 
 export class DeviceStore {
-  constructor(private kv: KVNamespace) {}
+  constructor(private storage: KVProvider) {}
 
   async createInvite(options: {
     ttlMs: number;
@@ -29,23 +30,27 @@ export class DeviceStore {
       used: false,
     };
 
-    await this.kv.put(
+    const ttlSeconds = Math.ceil(options.ttlMs / 1000) + 60;
+
+    await this.storage.put(
       `${KV_PREFIX.pairingRequest}${pairingId}`,
       JSON.stringify(request),
-      { expirationTtl: Math.ceil(options.ttlMs / 1000) + 60 },
+      { expirationTtl: ttlSeconds },
     );
 
-    await this.kv.put(
+    await this.storage.put(
       `${KV_PREFIX.tokenIndex}bootstrap:${bootstrap.tokenHash}`,
       pairingId,
-      { expirationTtl: Math.ceil(options.ttlMs / 1000) + 60 },
+      { expirationTtl: ttlSeconds },
     );
 
     return { bootstrapToken: bootstrap.token, pairingId };
   }
 
   async getPairingRequest(pairingId: string): Promise<PairingRequest | null> {
-    const raw = await this.kv.get(`${KV_PREFIX.pairingRequest}${pairingId}`);
+    const raw = await this.storage.get(
+      `${KV_PREFIX.pairingRequest}${pairingId}`,
+    );
     if (!raw) return null;
     return JSON.parse(raw) as PairingRequest;
   }
@@ -56,7 +61,7 @@ export class DeviceStore {
   }): Promise<{ deviceToken: string; deviceId: string }> {
     const bootstrapHash = await hashToken(options.bootstrapToken);
 
-    const pairingId = await this.kv.get(
+    const pairingId = await this.storage.get(
       `${KV_PREFIX.tokenIndex}bootstrap:${bootstrapHash}`,
     );
     if (!pairingId) {
@@ -73,11 +78,13 @@ export class DeviceStore {
     }
 
     request.used = true;
-    await this.kv.put(
+    await this.storage.put(
       `${KV_PREFIX.pairingRequest}${pairingId}`,
       JSON.stringify(request),
     );
-    await this.kv.delete(`${KV_PREFIX.tokenIndex}bootstrap:${bootstrapHash}`);
+    await this.storage.delete(
+      `${KV_PREFIX.tokenIndex}bootstrap:${bootstrapHash}`,
+    );
 
     const deviceId = crypto.randomUUID();
     const deviceToken = await generateToken();
@@ -93,9 +100,12 @@ export class DeviceStore {
       pairedAt: new Date().toISOString(),
     };
 
-    await this.kv.put(`${KV_PREFIX.device}${deviceId}`, JSON.stringify(device));
+    await this.storage.put(
+      `${KV_PREFIX.device}${deviceId}`,
+      JSON.stringify(device),
+    );
 
-    await this.kv.put(
+    await this.storage.put(
       `${KV_PREFIX.tokenIndex}device:${deviceTokenHash}`,
       deviceId,
     );
@@ -107,7 +117,7 @@ export class DeviceStore {
 
   async validateDeviceToken(token: string): Promise<Device | null> {
     const tokenHash = await hashToken(token);
-    const deviceId = await this.kv.get(
+    const deviceId = await this.storage.get(
       `${KV_PREFIX.tokenIndex}device:${tokenHash}`,
     );
     if (!deviceId) return null;
@@ -119,7 +129,7 @@ export class DeviceStore {
   }
 
   async getDevice(deviceId: string): Promise<Device | null> {
-    const raw = await this.kv.get(`${KV_PREFIX.device}${deviceId}`);
+    const raw = await this.storage.get(`${KV_PREFIX.device}${deviceId}`);
     if (!raw) return null;
     return JSON.parse(raw) as Device;
   }
@@ -128,10 +138,15 @@ export class DeviceStore {
     const device = await this.getDevice(deviceId);
     if (!device) return;
 
-    await this.kv.delete(`${KV_PREFIX.tokenIndex}device:${device.tokenHash}`);
+    await this.storage.delete(
+      `${KV_PREFIX.tokenIndex}device:${device.tokenHash}`,
+    );
 
     device.status = "revoked";
-    await this.kv.put(`${KV_PREFIX.device}${deviceId}`, JSON.stringify(device));
+    await this.storage.put(
+      `${KV_PREFIX.device}${deviceId}`,
+      JSON.stringify(device),
+    );
   }
 
   async listDevices(): Promise<Device[]> {
@@ -147,7 +162,7 @@ export class DeviceStore {
   }
 
   private async getDeviceList(): Promise<string[]> {
-    const raw = await this.kv.get(KV_PREFIX.deviceList);
+    const raw = await this.storage.get(KV_PREFIX.deviceList);
     if (!raw) return [];
     return JSON.parse(raw) as string[];
   }
@@ -155,6 +170,6 @@ export class DeviceStore {
   private async addToDeviceList(deviceId: string): Promise<void> {
     const list = await this.getDeviceList();
     list.push(deviceId);
-    await this.kv.put(KV_PREFIX.deviceList, JSON.stringify(list));
+    await this.storage.put(KV_PREFIX.deviceList, JSON.stringify(list));
   }
 }
