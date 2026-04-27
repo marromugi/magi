@@ -1,6 +1,5 @@
 # MAGI
 
-Claude Code を自律的にオーケストレーションするコーディングエージェント。
 
 ## Tech Stack
 
@@ -13,8 +12,6 @@ Claude Code を自律的にオーケストレーションするコーディン�
 
 ```
 packages/
-  core/   — ドメインロジック・DB 管理 (@magi/core)
-  cli/    — CLI エントリポイント (@magi/cli) — core を使う
 ```
 
 ## Commands (root)
