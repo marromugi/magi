@@ -1,0 +1,22 @@
+{
+  "name": "@magi/runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./profiles/local": "./src/profiles/local.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@magi/auth": "workspace:*",
+    "@magi/db": "workspace:*",
+    "@magi/kv": "workspace:*",
+    "@magi/sandbox": "workspace:*",
+    "@magi/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
