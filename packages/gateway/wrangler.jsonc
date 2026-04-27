@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "magi-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-05-06",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  // KV namespace for device/token storage
+  "kv_namespaces": [
+    {
+      "binding": "DEVICES",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+    }
+  ]
+  // TODO: Sandbox container configuration
+  // "containers": { ... }
+}

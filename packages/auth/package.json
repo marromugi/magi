@@ -1,0 +1,24 @@
+{
+  "name": "@magi/auth",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./token": "./src/token.ts",
+    "./device": "./src/device.ts",
+    "./middleware": "./src/middleware.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.7.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.9.0",
+    "@cloudflare/workers-types": "^4.20250522.0",
+    "vitest": "^3.2.1",
+    "wrangler": "^4.21.1"
+  }
+}
