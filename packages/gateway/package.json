@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@magi/auth": "workspace:*",
+    "@magi/db": "workspace:*",
+    "@magi/sandbox": "workspace:*",
     "@magi/kv": "workspace:*",
     "hono": "^4.7.10"
   },

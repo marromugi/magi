@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import type { Device } from "./types";
-import { DeviceStore } from "./device";
-import type { KVProvider } from "@magi/kv";
+import type { DeviceRepository } from "@magi/db";
+import { hashToken } from "./token";
 
 function extractBearerToken(header: string | undefined): string | null {
   if (!header) return null;
@@ -24,7 +24,7 @@ export function adminAuth() {
 }
 
 interface DeviceAuthEnv {
-  deviceStorage: KVProvider;
+  deviceRepository: DeviceRepository;
 }
 
 export function deviceAuth() {
@@ -37,9 +37,9 @@ export function deviceAuth() {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const store = new DeviceStore(c.env.deviceStorage);
-    const device = await store.validateDeviceToken(token);
-    if (!device) {
+    const tokenHash = await hashToken(token);
+    const device = await c.env.deviceRepository.findByTokenHash(tokenHash);
+    if (!device || device.status !== "paired") {
       return c.json({ error: "Unauthorized" }, 401);
     }
 

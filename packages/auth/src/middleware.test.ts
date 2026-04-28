@@ -4,13 +4,14 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { Hono } from "hono";
 import { FilesystemStorage } from "@magi/kv/providers/filesystem";
+import { SQLiteDatabase } from "@magi/db/providers/sqlite";
+import type { DeviceRepository } from "@magi/db";
 import { adminAuth, deviceAuth } from "./middleware";
 import { DeviceStore } from "./device";
-import type { KVProvider } from "@magi/kv";
 
 interface TestEnv {
   ADMIN_API_KEY: string;
-  deviceStorage: KVProvider;
+  deviceRepository: DeviceRepository;
 }
 
 function createApp() {
@@ -28,17 +29,20 @@ function createApp() {
 
 describe("adminAuth middleware", () => {
   let tempDir: string;
+  let db: SQLiteDatabase;
   let env: TestEnv;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "magi-mw-"));
+    db = new SQLiteDatabase(join(tempDir, "test.db"));
     env = {
       ADMIN_API_KEY: "test-admin-key",
-      deviceStorage: new FilesystemStorage(tempDir),
+      deviceRepository: db.devices,
     };
   });
 
   afterEach(async () => {
+    db.close();
     await rm(tempDir, { recursive: true });
   });
 
@@ -71,15 +75,20 @@ describe("adminAuth middleware", () => {
 
 describe("deviceAuth middleware", () => {
   let tempDir: string;
+  let db: SQLiteDatabase;
   let env: TestEnv;
   let deviceToken: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "magi-mw-"));
-    const storage = new FilesystemStorage(tempDir);
-    env = { ADMIN_API_KEY: "test-admin-key", deviceStorage: storage };
+    db = new SQLiteDatabase(join(tempDir, "test.db"));
+    const kv = new FilesystemStorage(join(tempDir, "kv"));
+    env = {
+      ADMIN_API_KEY: "test-admin-key",
+      deviceRepository: db.devices,
+    };
 
-    const store = new DeviceStore(storage);
+    const store = new DeviceStore({ kv, devices: db.devices });
     const invite = await store.createInvite({ ttlMs: 60_000 });
     const result = await store.pair({
       bootstrapToken: invite.bootstrapToken,
@@ -89,6 +98,7 @@ describe("deviceAuth middleware", () => {
   });
 
   afterEach(async () => {
+    db.close();
     await rm(tempDir, { recursive: true });
   });
 

@@ -1,14 +1,12 @@
 import type { KVProvider } from "@magi/kv";
+import type { DeviceRepository } from "@magi/db";
+import type { Sandbox } from "@magi/sandbox";
 
-export type {
-  Device,
-  DeviceId,
-  DeviceStatus,
-  TokenHash,
-  PairingRequest,
-} from "@magi/auth";
+export type { Device, DeviceStatus, PairingRequest } from "@magi/auth";
 
 export interface Env {
   ADMIN_API_KEY: string;
-  deviceStorage: KVProvider;
+  kv: KVProvider;
+  deviceRepository: DeviceRepository;
+  sandbox: Sandbox | null;
 }

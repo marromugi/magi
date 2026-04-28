@@ -3,23 +3,29 @@ import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { FilesystemStorage } from "@magi/kv/providers/filesystem";
+import { SQLiteDatabase } from "@magi/db/providers/sqlite";
 import app from "../index";
 import type { Env } from "../types";
 
 const ADMIN_KEY = "test-admin-key";
 const authHeader = { Authorization: `Bearer ${ADMIN_KEY}` };
 let tempDir: string;
+let db: SQLiteDatabase;
 let env: Env;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "magi-gw-"));
+  db = new SQLiteDatabase(join(tempDir, "test.db"));
   env = {
     ADMIN_API_KEY: ADMIN_KEY,
-    deviceStorage: new FilesystemStorage(tempDir),
+    kv: new FilesystemStorage(join(tempDir, "kv")),
+    deviceRepository: db.devices,
+    sandbox: null,
   };
 });
 
 afterEach(async () => {
+  db.close();
   await rm(tempDir, { recursive: true });
 });
 

@@ -9,19 +9,28 @@ const admin = new Hono<{ Bindings: Env }>();
 admin.use("/*", adminAuth());
 
 admin.post("/devices/invite", async (c) => {
-  const store = new DeviceStore(c.env.deviceStorage);
+  const store = new DeviceStore({
+    kv: c.env.kv,
+    devices: c.env.deviceRepository,
+  });
   const result = await store.createInvite({ ttlMs: BOOTSTRAP_TTL_MS });
   return c.json(result);
 });
 
 admin.get("/devices", async (c) => {
-  const store = new DeviceStore(c.env.deviceStorage);
+  const store = new DeviceStore({
+    kv: c.env.kv,
+    devices: c.env.deviceRepository,
+  });
   const devices = await store.listDevices();
   return c.json({ devices });
 });
 
 admin.delete("/devices/:id", async (c) => {
-  const store = new DeviceStore(c.env.deviceStorage);
+  const store = new DeviceStore({
+    kv: c.env.kv,
+    devices: c.env.deviceRepository,
+  });
   await store.revokeDevice(c.req.param("id"));
   return c.json({ ok: true });
 });

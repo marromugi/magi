@@ -3,18 +3,25 @@ import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { FilesystemStorage } from "@magi/kv/providers/filesystem";
+import { SQLiteDatabase } from "@magi/db/providers/sqlite";
 import { DeviceStore } from "./device";
 
 describe("DeviceStore", () => {
   let tempDir: string;
   let store: DeviceStore;
+  let db: SQLiteDatabase;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "magi-auth-"));
-    store = new DeviceStore(new FilesystemStorage(tempDir));
+    db = new SQLiteDatabase(join(tempDir, "test.db"));
+    store = new DeviceStore({
+      kv: new FilesystemStorage(join(tempDir, "kv")),
+      devices: db.devices,
+    });
   });
 
   afterEach(async () => {
+    db.close();
     await rm(tempDir, { recursive: true });
   });
 

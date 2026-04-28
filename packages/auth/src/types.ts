@@ -1,21 +1,8 @@
-export type DeviceId = string;
-export type TokenHash = string;
-
-export type DeviceStatus = "pending" | "paired" | "revoked";
-
-export interface Device {
-  id: DeviceId;
-  name: string;
-  tokenHash: TokenHash;
-  status: DeviceStatus;
-  scopes: string[];
-  createdAt: string;
-  pairedAt: string | null;
-}
+export type { DeviceRecord as Device, DeviceStatus } from "@magi/db";
 
 export interface PairingRequest {
   id: string;
-  bootstrapTokenHash: TokenHash;
+  bootstrapTokenHash: string;
   expiresAt: string;
   used: boolean;
 }

@@ -14,7 +14,10 @@ pair.post("/", async (c) => {
     return c.json({ error: "bootstrapToken and deviceName are required" }, 400);
   }
 
-  const store = new DeviceStore(c.env.deviceStorage);
+  const store = new DeviceStore({
+    kv: c.env.kv,
+    devices: c.env.deviceRepository,
+  });
   try {
     const result = await store.pair({
       bootstrapToken: body.bootstrapToken,

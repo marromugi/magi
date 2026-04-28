@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@magi/db": "workspace:*",
     "@magi/kv": "workspace:*",
     "hono": "^4.7.10"
   },
