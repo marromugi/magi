@@ -42,8 +42,50 @@ export class Browser {
     return this.getPageInfo();
   }
 
-  async content(): Promise<string> {
-    return this.safeEvaluate("document.body.innerText") as Promise<string>;
+  async content(options?: {
+    selector?: string;
+    search?: string;
+  }): Promise<string> {
+    const selectorJson = JSON.stringify(options?.selector ?? "");
+    const searchJson = JSON.stringify(options?.search ?? "");
+
+    return this.safeEvaluate(`(() => {
+      const sel = ${selectorJson};
+      const query = ${searchJson};
+
+      // 1. Pick root elements
+      let els;
+      if (sel) {
+        els = Array.from(document.querySelectorAll(sel));
+        if (els.length === 0) return "(no elements matched selector)";
+      } else {
+        const main = document.querySelector('main')
+          || document.querySelector('article')
+          || document.querySelector('[role="main"]');
+        els = [main || document.body];
+      }
+
+      // 2. Get text
+      const text = els.map(el => el.innerText.trim()).filter(Boolean).join("\\n\\n");
+
+      // 3. Text search
+      if (query) {
+        const lower = query.toLowerCase();
+        const lines = text.split("\\n").filter(l => l.trim());
+        const matched = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase().includes(lower)) {
+            const start = Math.max(0, i - 1);
+            const end = Math.min(lines.length, i + 3);
+            matched.push(lines.slice(start, end).join("\\n"));
+          }
+        }
+        if (matched.length === 0) return "(no text matched: " + query + ")";
+        return [...new Set(matched)].join("\\n---\\n");
+      }
+
+      return text;
+    })()`) as Promise<string>;
   }
 
   async html(): Promise<string> {

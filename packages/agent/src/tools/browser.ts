@@ -5,7 +5,7 @@ type BrowserAction =
   | { action: "navigate"; url: string }
   | { action: "click"; selector: string }
   | { action: "type"; selector: string; text: string }
-  | { action: "content" }
+  | { action: "content"; selector?: string; search?: string }
   | { action: "screenshot" }
   | { action: "evaluate"; script: string };
 
@@ -16,7 +16,7 @@ export function createBrowserTool(browser: Browser): Tool {
 - navigate: Open a URL. Returns page title and URL.
 - click: Click an element by CSS selector.
 - type: Type text into an input by CSS selector.
-- content: Get the text content of the current page.
+- content: Get text content. Use selector to narrow to specific elements, search to find text containing a keyword (returns matching lines with context).
 - screenshot: Take a screenshot (returns base64 PNG).
 - evaluate: Execute JavaScript in the page and return the result.
 
@@ -42,11 +42,16 @@ The browser maintains session state (cookies, localStorage) across actions.`,
         },
         selector: {
           type: "string",
-          description: "CSS selector (for click and type actions)",
+          description: "CSS selector (for click, type, and content actions)",
         },
         text: {
           type: "string",
           description: "Text to type (for type action)",
+        },
+        search: {
+          type: "string",
+          description:
+            "Text to search for in page content (for content action). Returns matching lines with context.",
         },
         script: {
           type: "string",
@@ -89,7 +94,10 @@ The browser maintains session state (cookies, localStorage) across actions.`,
             return { output: `Typed "${action.text}" into <${el.tagName}>` };
           }
           case "content": {
-            const text = await browser.content();
+            const text = await browser.content({
+              selector: action.selector,
+              search: action.search,
+            });
             return { output: text || "(empty page)" };
           }
           case "screenshot": {
