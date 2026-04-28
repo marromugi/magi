@@ -9,6 +9,7 @@ import type {
 export interface OpenRouterProviderOptions {
   apiKey: string;
   baseUrl?: string;
+  maxRetries?: number;
 }
 
 interface OpenRouterMessage {
@@ -23,7 +24,7 @@ interface OpenRouterMessage {
 }
 
 interface OpenRouterResponse {
-  choices: Array<{
+  choices?: Array<{
     message: {
       content: string | null;
       tool_calls?: Array<{
@@ -34,16 +35,22 @@ interface OpenRouterResponse {
     };
     finish_reason: string;
   }>;
+  error?: {
+    message: string;
+    code: number;
+  };
 }
 
 export class OpenRouterProvider implements LLMProvider {
   readonly name = "openrouter";
   private apiKey: string;
   private baseUrl: string;
+  private maxRetries: number;
 
   constructor(options: OpenRouterProviderOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl ?? "https://openrouter.ai/api/v1";
+    this.maxRetries = options.maxRetries ?? 3;
   }
 
   async chat(params: ChatParams): Promise<ChatResponse> {
@@ -66,25 +73,53 @@ export class OpenRouterProvider implements LLMProvider {
       }));
     }
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      const res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
 
-    if (!res.ok) {
-      const error = await res.text();
-      throw new Error(`OpenRouter API error (${res.status}): ${error}`);
+      if (res.status === 429) {
+        if (attempt < this.maxRetries) {
+          const waitMs = Math.min(1000 * 2 ** attempt, 10000);
+          await new Promise((r) => setTimeout(r, waitMs));
+          continue;
+        }
+        throw new Error(
+          `OpenRouter rate limited after ${this.maxRetries + 1} attempts`,
+        );
+      }
+
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`OpenRouter API error (${res.status}): ${error}`);
+      }
+
+      const data = (await res.json()) as OpenRouterResponse;
+
+      if (data.error) {
+        throw new Error(
+          `OpenRouter error: ${data.error.message} (${data.error.code})`,
+        );
+      }
+
+      const choice = data.choices?.[0];
+      if (!choice) {
+        if (attempt < this.maxRetries) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        throw new Error("OpenRouter returned empty response");
+      }
+
+      return this.parseResponse(choice);
     }
 
-    const data = (await res.json()) as OpenRouterResponse;
-    const choice = data.choices[0];
-    if (!choice) throw new Error("No response from OpenRouter");
-
-    return this.parseResponse(choice);
+    throw new Error("OpenRouter: max retries exceeded");
   }
 
   private buildMessages(params: ChatParams): OpenRouterMessage[] {
@@ -99,7 +134,6 @@ export class OpenRouterProvider implements LLMProvider {
         if (typeof msg.content === "string") {
           messages.push({ role: "user", content: msg.content });
         } else {
-          // Tool results
           for (const result of msg.content as ToolResultBlock[]) {
             messages.push({
               role: "tool",
@@ -109,7 +143,6 @@ export class OpenRouterProvider implements LLMProvider {
           }
         }
       } else {
-        // Assistant message
         const textParts = msg.content
           .filter((b) => b.type === "text")
           .map((b) => (b as { text: string }).text)
@@ -144,7 +177,7 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   private parseResponse(
-    choice: OpenRouterResponse["choices"][0],
+    choice: NonNullable<OpenRouterResponse["choices"]>[0],
   ): ChatResponse {
     const content: ContentBlock[] = [];
 
