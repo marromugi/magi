@@ -67,6 +67,11 @@ class DockerSandbox implements Sandbox {
           args.push("-e", `${key}=${value}`);
         }
       }
+      if (this.config.ports) {
+        for (const [container, host] of Object.entries(this.config.ports)) {
+          args.push("-p", `${host}:${container}`);
+        }
+      }
 
       // Keep container alive with tail -f /dev/null
       args.push(this.config.image, "tail", "-f", "/dev/null");
@@ -140,6 +145,11 @@ class DockerSandbox implements Sandbox {
     if (this.config.env) {
       for (const [key, value] of Object.entries(this.config.env)) {
         args.push("-e", `${key}=${value}`);
+      }
+    }
+    if (this.config.ports) {
+      for (const [container, host] of Object.entries(this.config.ports)) {
+        args.push("-p", `${host}:${container}`);
       }
     }
 

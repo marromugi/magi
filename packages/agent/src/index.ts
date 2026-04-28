@@ -6,6 +6,7 @@ export {
   createExecTool,
   createUploadTool,
   createDownloadTool,
+  createBrowserTool,
   createTaskTool,
 } from "./tools";
 export type {

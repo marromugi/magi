@@ -20,6 +20,7 @@
       "name": "@magi/agent",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.52.0",
+        "@magi/browser": "workspace:*",
         "@magi/db": "workspace:*",
         "@magi/sandbox": "workspace:*",
       },
@@ -34,6 +35,12 @@
         "@magi/kv": "workspace:*",
         "hono": "^4.7.10",
       },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+    },
+    "packages/browser": {
+      "name": "@magi/browser",
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -267,6 +274,8 @@
     "@magi/agent": ["@magi/agent@workspace:packages/agent"],
 
     "@magi/auth": ["@magi/auth@workspace:packages/auth"],
+
+    "@magi/browser": ["@magi/browser@workspace:packages/browser"],
 
     "@magi/cli": ["@magi/cli@workspace:packages/cli"],
 

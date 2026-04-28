@@ -4,6 +4,7 @@ export interface SandboxConfig {
   cpus?: number;
   memoryMib?: number;
   env?: Record<string, string>;
+  ports?: Record<number, number>; // container port → host port
 }
 
 export interface ExecResult {
