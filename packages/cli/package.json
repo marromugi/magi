@@ -11,6 +11,8 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@magi/agent": "workspace:*",
+    "@magi/runtime": "workspace:*",
     "commander": "^14.0.0"
   },
   "devDependencies": {

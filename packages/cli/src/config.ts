@@ -5,11 +5,15 @@ import { homedir } from "os";
 export interface Config {
   workerUrl: string;
   adminApiKey: string;
+  anthropicApiKey: string;
+  model: string;
 }
 
 const DEFAULT_CONFIG: Config = {
   workerUrl: "",
   adminApiKey: "",
+  anthropicApiKey: "",
+  model: "claude-sonnet-4-20250514",
 };
 
 export function defaultConfigPath(): string {

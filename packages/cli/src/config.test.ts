@@ -17,14 +17,21 @@ describe("config", () => {
 
   it("returns default config when file does not exist", async () => {
     const config = await readConfig(join(tempDir, "config.json"));
-    expect(config).toEqual({ workerUrl: "", adminApiKey: "" });
+    expect(config).toEqual({
+      workerUrl: "",
+      adminApiKey: "",
+      anthropicApiKey: "",
+      model: "claude-sonnet-4-20250514",
+    });
   });
 
   it("writes and reads config", async () => {
     const path = join(tempDir, "config.json");
     const config: Config = {
-      workerUrl: "https://magi-sandbox.workers.dev",
-      adminApiKey: "my-secret-key",
+      workerUrl: "https://magi.workers.dev",
+      adminApiKey: "admin-key",
+      anthropicApiKey: "sk-ant-xxx",
+      model: "claude-sonnet-4-20250514",
     };
     await writeConfig(path, config);
     const loaded = await readConfig(path);
