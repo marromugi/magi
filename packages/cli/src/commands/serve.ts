@@ -35,13 +35,17 @@ export function serveCommand(ui: UI): Command {
         const runtime = createLocalRuntime();
         const port = parseInt(opts.port, 10);
 
-        // Create or get sandbox
+        // Create or get sandbox with proxy env pointing to gateway
+        const proxyUrl = `http://host.docker.internal:${port}/proxy`;
         const existing = await runtime.sandbox.get("default");
         const sandbox =
           existing ??
           (await runtime.sandbox.create({
             name: "default",
             image: opts.image,
+            env: {
+              MAGI_PROXY_URL: proxyUrl,
+            },
           }));
 
         const stop = ui.spinner.start("Starting sandbox...");

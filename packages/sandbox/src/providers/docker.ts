@@ -21,6 +21,7 @@ async function dockerExec(
 
 export interface DockerProviderOptions {
   prefix?: string;
+  network?: string;
 }
 
 class DockerSandbox implements Sandbox {
@@ -71,6 +72,9 @@ class DockerSandbox implements Sandbox {
         for (const [container, host] of Object.entries(this.config.ports)) {
           args.push("-p", `${host}:${container}`);
         }
+      }
+      if (this.config.network) {
+        args.push("--network", this.config.network);
       }
 
       // Use custom command or default to keeping container alive
@@ -190,6 +194,9 @@ class DockerSandbox implements Sandbox {
         args.push("-p", `${host}:${container}`);
       }
     }
+    if (this.config.network) {
+      args.push("--network", this.config.network);
+    }
 
     args.push(
       imageName,
@@ -206,10 +213,20 @@ class DockerSandbox implements Sandbox {
 export class DockerSandboxProvider implements SandboxProvider {
   readonly name = "docker";
   private prefix: string;
+  private network: string | undefined;
   private sandboxes = new Map<string, DockerSandbox>();
 
   constructor(options?: DockerProviderOptions) {
     this.prefix = options?.prefix ?? "magi";
+    this.network = options?.network;
+  }
+
+  async ensureNetwork(): Promise<void> {
+    if (!this.network) return;
+    const result = await dockerExec(["network", "inspect", this.network]);
+    if (result.exitCode !== 0) {
+      await dockerExec(["network", "create", this.network]);
+    }
   }
 
   private containerName(id: string): string {
@@ -217,10 +234,14 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   async create(config: SandboxConfig): Promise<Sandbox> {
+    await this.ensureNetwork();
+    const fullConfig = this.network
+      ? { ...config, network: config.network ?? this.network }
+      : config;
     const sandbox = new DockerSandbox(
       config.name,
       this.containerName(config.name),
-      config,
+      fullConfig,
       this.prefix,
     );
     this.sandboxes.set(config.name, sandbox);

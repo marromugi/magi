@@ -6,6 +6,7 @@ export interface SandboxConfig {
   env?: Record<string, string>;
   ports?: Record<number, number>; // container port → host port
   command?: string[]; // override default command
+  network?: string; // Docker network name
 }
 
 export interface ExecOptions {
