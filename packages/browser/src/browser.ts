@@ -29,99 +29,126 @@ export class Browser {
     await this.cdp.send("Page.enable");
     await this.cdp.send("Runtime.enable");
     await this.cdp.send("Network.enable");
+    await this.cdp.send("Page.setLifecycleEventsEnabled", { enabled: true });
   }
 
   async navigate(url: string): Promise<PageInfo> {
+    // Listen for load event before navigating
+    const loaded = this.waitForLifecycleEvent("load");
     await this.cdp.send("Page.navigate", { url });
-    await this.waitForLoad();
+    await loaded;
+    // Small delay for JS-heavy pages
+    await sleep(500);
     return this.getPageInfo();
   }
 
   async content(): Promise<string> {
-    const result = await this.cdp.send("Runtime.evaluate", {
-      expression: "document.body.innerText",
-      returnByValue: true,
-    });
-    const value = result.result as { value?: string } | undefined;
-    return value?.value ?? "";
+    return this.safeEvaluate("document.body.innerText") as Promise<string>;
   }
 
   async html(): Promise<string> {
-    const result = await this.cdp.send("Runtime.evaluate", {
-      expression: "document.documentElement.outerHTML",
-      returnByValue: true,
-    });
-    const value = result.result as { value?: string } | undefined;
-    return value?.value ?? "";
+    return this.safeEvaluate(
+      "document.documentElement.outerHTML",
+    ) as Promise<string>;
   }
 
   async click(selector: string): Promise<ElementInfo> {
-    const result = await this.cdp.send("Runtime.evaluate", {
-      expression: `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return { found: false };
-        el.click();
-        return { found: true, text: el.textContent?.trim(), tagName: el.tagName };
-      })()`,
-      returnByValue: true,
-    });
-    return (result.result as { value: ElementInfo }).value;
+    const result = await this.safeEvaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return JSON.stringify({ found: false });
+      el.click();
+      return JSON.stringify({ found: true, text: el.textContent?.trim().slice(0, 100), tagName: el.tagName });
+    })()`);
+    return JSON.parse(result as string) as ElementInfo;
   }
 
   async type(selector: string, text: string): Promise<ElementInfo> {
-    const result = await this.cdp.send("Runtime.evaluate", {
-      expression: `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return { found: false };
-        el.focus();
-        el.value = ${JSON.stringify(text)};
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-        return { found: true, tagName: el.tagName };
-      })()`,
-      returnByValue: true,
-    });
-    return (result.result as { value: ElementInfo }).value;
+    const result = await this.safeEvaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return JSON.stringify({ found: false });
+      el.focus();
+      el.value = ${JSON.stringify(text)};
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return JSON.stringify({ found: true, tagName: el.tagName });
+    })()`);
+    return JSON.parse(result as string) as ElementInfo;
   }
 
   async screenshot(): Promise<string> {
     const result = await this.cdp.send("Page.captureScreenshot", {
       format: "png",
     });
-    return result.data as string; // base64
+    return result.data as string;
   }
 
   async evaluate(expression: string): Promise<unknown> {
-    const result = await this.cdp.send("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    const res = result.result as { value?: unknown } | undefined;
-    return res?.value;
+    return this.safeEvaluate(expression);
   }
 
   async getPageInfo(): Promise<PageInfo> {
-    const result = await this.cdp.send("Runtime.evaluate", {
-      expression:
-        "JSON.stringify({ url: location.href, title: document.title })",
-      returnByValue: true,
-    });
-    const value = result.result as { value?: string } | undefined;
-    return value?.value ? JSON.parse(value.value) : { url: "", title: "" };
+    const result = await this.safeEvaluate(
+      "JSON.stringify({ url: location.href, title: document.title })",
+    );
+    return result
+      ? (JSON.parse(result as string) as PageInfo)
+      : { url: "", title: "" };
   }
 
   async close(): Promise<void> {
     await this.cdp.close();
   }
 
-  private async waitForLoad(): Promise<void> {
-    await this.cdp.send("Runtime.evaluate", {
-      expression: `new Promise(resolve => {
-        if (document.readyState === 'complete') resolve();
-        else window.addEventListener('load', resolve, { once: true });
-      })`,
-      awaitPromise: true,
+  private async safeEvaluate(
+    expression: string,
+    retries = 3,
+  ): Promise<unknown> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const result = await this.cdp.send("Runtime.evaluate", {
+          expression,
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        const res = result.result as { value?: unknown } | undefined;
+        return res?.value ?? "";
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // Retry on context/target errors (happens during navigation)
+        if (
+          msg.includes("Cannot find context") ||
+          msg.includes("Inspected target") ||
+          msg.includes("Execution context")
+        ) {
+          await sleep(500);
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error("Failed to evaluate after retries");
+  }
+
+  private waitForLifecycleEvent(
+    eventName: string,
+    timeoutMs = 30000,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Timeout waiting for ${eventName}`));
+      }, timeoutMs);
+
+      this.cdp.on("Page.lifecycleEvent", (params) => {
+        const event = params as { name: string };
+        if (event.name === eventName) {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
     });
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
