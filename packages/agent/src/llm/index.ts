@@ -14,3 +14,5 @@ export type {
 } from "./types";
 export { AnthropicProvider } from "./anthropic";
 export type { AnthropicProviderOptions } from "./anthropic";
+export { OpenRouterProvider } from "./openrouter";
+export type { OpenRouterProviderOptions } from "./openrouter";

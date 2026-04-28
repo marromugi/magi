@@ -24,4 +24,4 @@ export type {
   ContentBlock,
   ToolDefinition,
 } from "./llm";
-export { AnthropicProvider } from "./llm";
+export { AnthropicProvider, OpenRouterProvider } from "./llm";

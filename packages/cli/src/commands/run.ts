@@ -4,10 +4,12 @@ import { createLocalRuntime } from "@magi/runtime";
 import {
   Agent,
   AnthropicProvider,
+  OpenRouterProvider,
   createSandboxTools,
   createTaskTool,
   createSessionLogger,
 } from "@magi/agent";
+import type { LLMProvider } from "@magi/agent";
 import type { UI } from "../ui";
 
 export function runCommand(ui: UI): Command {
@@ -18,6 +20,11 @@ export function runCommand(ui: UI): Command {
     .option("--image <image>", "Docker image for sandbox", "node:22-slim")
     .option("--system-prompt <prompt>", "System prompt for the agent")
     .option("--max-steps <n>", "Maximum agent steps", "50")
+    .option(
+      "--provider <provider>",
+      "LLM provider (anthropic, openrouter)",
+      "anthropic",
+    )
     .action(
       async (
         task: string,
@@ -26,19 +33,11 @@ export function runCommand(ui: UI): Command {
           image: string;
           systemPrompt?: string;
           maxSteps: string;
+          provider: string;
         },
       ) => {
         const config = await readConfig(defaultConfigPath());
-
-        const apiKey =
-          process.env["ANTHROPIC_API_KEY"] || config.anthropicApiKey;
-        if (!apiKey) {
-          ui.error(
-            "ANTHROPIC_API_KEY not set. Set it via environment variable or `magi init`.",
-          );
-          process.exit(1);
-        }
-
+        const llm = createLLMProvider(opts.provider, config, ui);
         const model = opts.model ?? config.model;
         const runtime = createLocalRuntime();
 
@@ -63,7 +62,6 @@ export function runCommand(ui: UI): Command {
           });
 
           // Build agent
-          const llm = new AnthropicProvider({ apiKey });
           const sandboxTools = createSandboxTools(sandbox);
           const agentConfig = {
             llm,
@@ -128,4 +126,32 @@ export function runCommand(ui: UI): Command {
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max) + "...";
+}
+
+function createLLMProvider(
+  provider: string,
+  config: { anthropicApiKey: string },
+  ui: UI,
+): LLMProvider {
+  switch (provider) {
+    case "anthropic": {
+      const apiKey = process.env["ANTHROPIC_API_KEY"] || config.anthropicApiKey;
+      if (!apiKey) {
+        ui.error("ANTHROPIC_API_KEY not set. Set via env or `magi init`.");
+        process.exit(1);
+      }
+      return new AnthropicProvider({ apiKey });
+    }
+    case "openrouter": {
+      const apiKey = process.env["OPENROUTER_API_KEY"];
+      if (!apiKey) {
+        ui.error("OPENROUTER_API_KEY not set.");
+        process.exit(1);
+      }
+      return new OpenRouterProvider({ apiKey });
+    }
+    default:
+      ui.error(`Unknown provider: ${provider}`);
+      process.exit(1);
+  }
 }
