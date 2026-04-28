@@ -13,3 +13,9 @@ export interface ExecResult {
 }
 
 export type SandboxStatus = "creating" | "running" | "stopped";
+
+export interface SnapshotInfo {
+  id: string;
+  tag: string;
+  createdAt: string;
+}

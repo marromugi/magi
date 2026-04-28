@@ -4,4 +4,5 @@ export type {
   SandboxConfig,
   ExecResult,
   SandboxStatus,
+  SnapshotInfo,
 } from "./core";

@@ -1,5 +1,10 @@
 import type { Sandbox, SandboxProvider } from "../core/provider";
-import type { SandboxConfig, ExecResult, SandboxStatus } from "../core/types";
+import type {
+  SandboxConfig,
+  ExecResult,
+  SandboxStatus,
+  SnapshotInfo,
+} from "../core/types";
 
 class LocalSandbox implements Sandbox {
   readonly id: string;
@@ -13,11 +18,14 @@ class LocalSandbox implements Sandbox {
   }
 
   async start(): Promise<void> {
-    // TODO: integrate microsandbox
     this._status = "running";
   }
 
   async stop(): Promise<void> {
+    this._status = "stopped";
+  }
+
+  async reset(): Promise<void> {
     this._status = "stopped";
   }
 
@@ -26,12 +34,23 @@ class LocalSandbox implements Sandbox {
   }
 
   async exec(command: string, args?: string[]): Promise<ExecResult> {
-    // TODO: integrate microsandbox
     return {
       exitCode: 1,
       stdout: "",
       stderr: `Local sandbox not yet implemented: ${command} ${(args ?? []).join(" ")}`,
     };
+  }
+
+  async snapshot(tag?: string): Promise<SnapshotInfo> {
+    return {
+      id: `local-${this.id}-${Date.now()}`,
+      tag: tag ?? "latest",
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  async restore(): Promise<void> {
+    // placeholder
   }
 }
 
@@ -51,5 +70,9 @@ export class LocalSandboxProvider implements SandboxProvider {
 
   async list(): Promise<Sandbox[]> {
     return [...this.sandboxes.values()];
+  }
+
+  async snapshots(): Promise<SnapshotInfo[]> {
+    return [];
   }
 }

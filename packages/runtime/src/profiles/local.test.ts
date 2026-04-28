@@ -56,6 +56,6 @@ describe("local runtime", () => {
 
   it("provides a sandbox provider", () => {
     runtime = createLocalRuntime({ dataDir: testDir });
-    expect(runtime.sandbox.name).toBe("local");
+    expect(runtime.sandbox.name).toBe("docker");
   });
 });

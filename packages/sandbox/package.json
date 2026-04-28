@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./core": "./src/core/index.ts",
-    "./providers/local": "./src/providers/local.ts"
+    "./providers/local": "./src/providers/local.ts",
+    "./providers/docker": "./src/providers/docker.ts"
   },
   "scripts": {
     "test": "bun test"
