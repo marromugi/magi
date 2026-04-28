@@ -200,6 +200,12 @@ export function runCommand(ui: UI): Command {
           if (browserInstance) {
             await browserInstance.close();
           }
+          if (chromeSandboxName) {
+            const chromeSandbox = await runtime.sandbox.get(chromeSandboxName);
+            if (chromeSandbox) {
+              await chromeSandbox.stop();
+            }
+          }
           const stopClean = ui.spinner.start("Stopping sandbox...");
           await sandbox.stop();
           stopClean("Sandbox stopped.", "success");
