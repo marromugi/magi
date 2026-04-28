@@ -6,6 +6,7 @@ import { initCommand } from "./commands/init";
 import { runCommand } from "./commands/run";
 import { serveCommand } from "./commands/serve";
 import { secretCommand } from "./commands/secret";
+import { sandboxCommand } from "./commands/sandbox";
 
 const ui = createUI();
 
@@ -19,5 +20,6 @@ program.addCommand(deviceCommand(ui));
 program.addCommand(runCommand(ui));
 program.addCommand(serveCommand(ui));
 program.addCommand(secretCommand(ui));
+program.addCommand(sandboxCommand(ui));
 
 program.parse();
