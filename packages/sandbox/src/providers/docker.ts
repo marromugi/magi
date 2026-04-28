@@ -115,8 +115,18 @@ class DockerSandbox implements Sandbox {
     return "stopped";
   }
 
-  async exec(command: string, args?: string[]): Promise<ExecResult> {
-    const execArgs = ["exec", this.containerName, command, ...(args ?? [])];
+  async exec(
+    command: string,
+    args?: string[],
+    options?: { env?: Record<string, string> },
+  ): Promise<ExecResult> {
+    const execArgs = ["exec"];
+    if (options?.env) {
+      for (const [key, value] of Object.entries(options.env)) {
+        execArgs.push("-e", `${key}=${value}`);
+      }
+    }
+    execArgs.push(this.containerName, command, ...(args ?? []));
     return dockerExec(execArgs);
   }
 

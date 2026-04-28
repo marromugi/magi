@@ -1,5 +1,6 @@
 import type {
   SandboxConfig,
+  ExecOptions,
   ExecResult,
   SandboxStatus,
   SnapshotInfo,
@@ -11,7 +12,11 @@ export interface Sandbox {
   stop(): Promise<void>;
   reset(): Promise<void>;
   status(): Promise<SandboxStatus>;
-  exec(command: string, args?: string[]): Promise<ExecResult>;
+  exec(
+    command: string,
+    args?: string[],
+    options?: ExecOptions,
+  ): Promise<ExecResult>;
   snapshot(tag?: string): Promise<SnapshotInfo>;
   restore(tag: string): Promise<void>;
 }

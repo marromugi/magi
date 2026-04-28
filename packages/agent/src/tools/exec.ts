@@ -1,7 +1,14 @@
 import type { Sandbox } from "@magi/sandbox";
 import type { Tool, ToolResult } from "../types";
 
-export function createExecTool(sandbox: Sandbox): Tool {
+export interface ExecToolOptions {
+  env?: Record<string, string>;
+}
+
+export function createExecTool(
+  sandbox: Sandbox,
+  options?: ExecToolOptions,
+): Tool {
   return {
     name: "exec",
     description:
@@ -23,7 +30,7 @@ export function createExecTool(sandbox: Sandbox): Tool {
     },
     async execute(input): Promise<ToolResult> {
       const { command, args } = input as { command: string; args?: string[] };
-      const result = await sandbox.exec(command, args);
+      const result = await sandbox.exec(command, args, { env: options?.env });
 
       const parts: string[] = [];
       if (result.stdout) parts.push(result.stdout);

@@ -8,6 +8,10 @@ export interface SandboxConfig {
   command?: string[]; // override default command
 }
 
+export interface ExecOptions {
+  env?: Record<string, string>;
+}
+
 export interface ExecResult {
   exitCode: number;
   stdout: string;

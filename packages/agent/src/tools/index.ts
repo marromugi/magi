@@ -7,8 +7,19 @@ import { createDownloadTool } from "./download";
 import { createBrowserTool } from "./browser";
 import { createTaskTool } from "./task";
 
-export function createSandboxTools(sandbox: Sandbox): Tool[] {
-  return [createExecTool(sandbox), createUploadTool(), createDownloadTool()];
+export interface SandboxToolsOptions {
+  env?: Record<string, string>;
+}
+
+export function createSandboxTools(
+  sandbox: Sandbox,
+  options?: SandboxToolsOptions,
+): Tool[] {
+  return [
+    createExecTool(sandbox, { env: options?.env }),
+    createUploadTool(),
+    createDownloadTool(),
+  ];
 }
 
 export function createAllTools(
