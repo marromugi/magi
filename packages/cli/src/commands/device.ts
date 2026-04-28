@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { AdminClient } from "../client";
 import { readConfig, defaultConfigPath } from "../config";
 import type { UI } from "../ui";
+import { renderQR } from "../ui/qr";
 
 function createClient(ui: UI, configPath: string) {
   return async () => {
@@ -41,6 +42,18 @@ export function deviceCommand(
       ]);
       ui.newline();
       ui.info("The token expires in 10 minutes.");
+
+      // Show QR code for easy pairing
+      const pairingData = JSON.stringify({
+        url: pairUrl,
+        token: result.bootstrapToken,
+      });
+      const qr = await renderQR(pairingData);
+      if (qr !== pairingData) {
+        ui.newline();
+        ui.header("Scan to pair");
+        console.log(qr);
+      }
     });
 
   device
