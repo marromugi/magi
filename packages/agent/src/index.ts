@@ -1,4 +1,5 @@
 export { Agent } from "./agent";
+export { createSessionLogger } from "./session";
 export {
   createSandboxTools,
   createAllTools,
@@ -10,6 +11,7 @@ export {
 export type {
   AgentConfig,
   AgentStep,
+  SessionLogger,
   Tool,
   ToolResult,
   StepType,

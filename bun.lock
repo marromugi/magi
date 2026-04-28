@@ -20,6 +20,7 @@
       "name": "@magi/agent",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.52.0",
+        "@magi/db": "workspace:*",
         "@magi/sandbox": "workspace:*",
       },
       "devDependencies": {

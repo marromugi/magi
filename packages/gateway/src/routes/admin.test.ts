@@ -20,6 +20,8 @@ beforeEach(async () => {
     ADMIN_API_KEY: ADMIN_KEY,
     kv: new FilesystemStorage(join(tempDir, "kv")),
     deviceRepository: db.devices,
+    sessionRepository: db.sessions,
+    stepRepository: db.steps,
     sandbox: null,
   };
 });

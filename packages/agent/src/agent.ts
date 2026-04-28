@@ -1,100 +1,115 @@
+import type { Message, ContentBlock, ToolResultBlock } from "./llm";
 import type {
-  LLMProvider,
-  Message,
-  ContentBlock,
-  ToolResultBlock,
-} from "./llm";
-import type { AgentConfig, AgentStep, Tool, ToolResult } from "./types";
+  AgentConfig,
+  AgentStep,
+  Tool,
+  ToolResult,
+  SessionLogger,
+} from "./types";
 
 const DEFAULT_MAX_STEPS = 50;
 
 export class Agent {
-  private llm: LLMProvider;
-  private model: string;
-  private tools: Tool[];
+  private config: AgentConfig;
   private toolMap: Map<string, Tool>;
-  private systemPrompt: string | undefined;
-  private maxSteps: number;
   private messages: Message[] = [];
+  private session: SessionLogger | undefined;
 
   constructor(config: AgentConfig) {
-    this.llm = config.llm;
-    this.model = config.model;
-    this.tools = config.tools ?? [];
-    this.toolMap = new Map(this.tools.map((t) => [t.name, t]));
-    this.systemPrompt = config.systemPrompt;
-    this.maxSteps = config.maxSteps ?? DEFAULT_MAX_STEPS;
+    this.config = config;
+    this.toolMap = new Map((config.tools ?? []).map((t) => [t.name, t]));
+    this.session = config.session;
   }
 
   async *run(task: string): AsyncGenerator<AgentStep> {
+    const userStep: AgentStep = { type: "user_message", content: task };
+    await this.session?.logStep(userStep);
+    yield userStep;
+
     this.messages.push({ role: "user", content: task });
 
-    for (let step = 0; step < this.maxSteps; step++) {
-      const response = await this.llm.chat({
-        model: this.model,
-        system: this.systemPrompt,
-        tools: this.tools.map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema,
-        })),
-        messages: this.messages,
-      });
+    const maxSteps = this.config.maxSteps ?? DEFAULT_MAX_STEPS;
+    const tools = this.config.tools ?? [];
 
-      // Collect assistant content
-      const assistantContent: ContentBlock[] = response.content;
-      const toolUseBlocks = response.content.filter(
-        (b): b is ContentBlock & { type: "tool_use" } => b.type === "tool_use",
-      );
-
-      // Yield text blocks
-      for (const block of response.content) {
-        if (block.type === "text" && block.text.trim()) {
-          yield { type: "text", content: block.text };
-        }
-      }
-
-      this.messages.push({ role: "assistant", content: assistantContent });
-
-      // No tool calls = done
-      if (toolUseBlocks.length === 0) {
-        return;
-      }
-
-      // Execute tool calls
-      const toolResults: ToolResultBlock[] = [];
-
-      for (const toolUse of toolUseBlocks) {
-        yield {
-          type: "tool_call",
-          toolName: toolUse.name,
-          toolInput: toolUse.input,
-          content: `${toolUse.name}(${JSON.stringify(toolUse.input)})`,
-        };
-
-        const result = await this.executeTool(toolUse.name, toolUse.input);
-
-        yield {
-          type: "tool_result",
-          toolName: toolUse.name,
-          content: result.output,
-        };
-
-        toolResults.push({
-          type: "tool_result",
-          toolUseId: toolUse.id,
-          content: result.output,
-          isError: result.isError,
+    try {
+      for (let step = 0; step < maxSteps; step++) {
+        const response = await this.config.llm.chat({
+          model: this.config.model,
+          system: this.config.systemPrompt,
+          tools: tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          })),
+          messages: this.messages,
         });
+
+        const assistantContent: ContentBlock[] = response.content;
+        const toolUseBlocks = response.content.filter(
+          (b): b is ContentBlock & { type: "tool_use" } =>
+            b.type === "tool_use",
+        );
+
+        for (const block of response.content) {
+          if (block.type === "text" && block.text.trim()) {
+            const textStep: AgentStep = { type: "text", content: block.text };
+            await this.session?.logStep(textStep);
+            yield textStep;
+          }
+        }
+
+        this.messages.push({ role: "assistant", content: assistantContent });
+
+        if (toolUseBlocks.length === 0) {
+          await this.session?.complete();
+          return;
+        }
+
+        const toolResults: ToolResultBlock[] = [];
+
+        for (const toolUse of toolUseBlocks) {
+          const callStep: AgentStep = {
+            type: "tool_call",
+            toolName: toolUse.name,
+            toolInput: toolUse.input,
+            content: `${toolUse.name}(${JSON.stringify(toolUse.input)})`,
+          };
+          await this.session?.logStep(callStep);
+          yield callStep;
+
+          const result = await this.executeTool(toolUse.name, toolUse.input);
+
+          const resultStep: AgentStep = {
+            type: "tool_result",
+            toolName: toolUse.name,
+            content: result.output,
+          };
+          await this.session?.logStep(resultStep);
+          yield resultStep;
+
+          toolResults.push({
+            type: "tool_result",
+            toolUseId: toolUse.id,
+            content: result.output,
+            isError: result.isError,
+          });
+        }
+
+        this.messages.push({ role: "user", content: toolResults });
       }
 
-      this.messages.push({ role: "user", content: toolResults });
+      const maxStepMsg: AgentStep = {
+        type: "text",
+        content: `Agent reached maximum steps (${maxSteps}). Task may be incomplete.`,
+      };
+      await this.session?.logStep(maxStepMsg);
+      await this.session?.fail("max steps reached");
+      yield maxStepMsg;
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      await this.session?.fail(errorMsg);
+      throw e;
     }
-
-    yield {
-      type: "text",
-      content: `Agent reached maximum steps (${this.maxSteps}). Task may be incomplete.`,
-    };
   }
 
   private async executeTool(

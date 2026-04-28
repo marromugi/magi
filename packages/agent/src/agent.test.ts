@@ -50,9 +50,10 @@ describe("Agent", () => {
     const agent = new Agent({ llm, model: "test", maxSteps: 3 });
     const steps = await collectSteps(agent.run("Say hello"));
 
-    expect(steps).toHaveLength(1);
-    expect(steps[0]!.type).toBe("text");
-    expect(steps[0]!.content).toBe("Hello!");
+    expect(steps).toHaveLength(2); // user_message + text
+    expect(steps[0]!.type).toBe("user_message");
+    expect(steps[1]!.type).toBe("text");
+    expect(steps[1]!.content).toBe("Hello!");
   });
 
   it("executes tool calls and feeds results back", async () => {
@@ -89,13 +90,14 @@ describe("Agent", () => {
 
     const steps = await collectSteps(agent.run("Greet the world"));
 
-    expect(steps).toHaveLength(3); // tool_call + tool_result + text
-    expect(steps[0]!.type).toBe("tool_call");
-    expect(steps[0]!.toolName).toBe("greet");
-    expect(steps[1]!.type).toBe("tool_result");
-    expect(steps[1]!.content).toBe("Hello, world!");
-    expect(steps[2]!.type).toBe("text");
-    expect(steps[2]!.content).toContain("Done");
+    expect(steps).toHaveLength(4); // user_message + tool_call + tool_result + text
+    expect(steps[0]!.type).toBe("user_message");
+    expect(steps[1]!.type).toBe("tool_call");
+    expect(steps[1]!.toolName).toBe("greet");
+    expect(steps[2]!.type).toBe("tool_result");
+    expect(steps[2]!.content).toBe("Hello, world!");
+    expect(steps[3]!.type).toBe("text");
+    expect(steps[3]!.content).toContain("Done");
   });
 
   it("handles multiple tool calls in one response", async () => {

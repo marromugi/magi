@@ -3,6 +3,7 @@ import type { Device, Env } from "./types";
 import { admin } from "./routes/admin";
 import { pair } from "./routes/pair";
 import { sandbox } from "./routes/sandbox";
+import { sessions } from "./routes/sessions";
 import { deviceAuth } from "@magi/auth";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -22,6 +23,7 @@ api.get("/me", (c) => {
   return c.json({ device: { id: device.id, name: device.name } });
 });
 api.route("/sandbox", sandbox);
+api.route("/sessions", sessions);
 app.route("/api", api);
 
 export default app;
