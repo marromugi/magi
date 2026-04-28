@@ -17,7 +17,7 @@ Sandbox 型の自律エージェントオーケストレーター。Docker コ�
 ```
 packages/
   kv/          — KVProvider interface + FilesystemStorage (TTL 付き一時データ)
-  db/          — DatabaseProvider interface + SQLite (devices, sessions, steps)
+  db/          — DatabaseProvider interface + SQLite/D1 (devices, sessions, steps, secrets)
   storage/     — StorageProvider interface + FilesystemStorageProvider (バイナリ/ファイル)
   auth/        — DeviceStore + middleware (KV + DB, device pairing)
   sandbox/     — SandboxProvider interface + Docker provider (exec, snapshot/restore)
@@ -56,6 +56,15 @@ Tools:
 - **Browser**: CDP で Chrome を直接操作. WebDriver 不使用でボット検出回避. セッション (cookies) 維持
 - **Runtime Profile**: 互換性のある provider セットを束ねる. local (Docker + SQLite + FS) / cloudflare (Containers + D1 + R2)
 
+## Secrets
+
+シークレットは sandbox に直接渡さず、placeholder 方式で管理する。
+
+- `magi secret add` で登録 → DB に保存（name, value, placeholder）
+- sandbox の exec 時に `docker exec -e NAME=placeholder` で注入
+- gateway の `/proxy` route が outbound リクエスト内の placeholder を本物に置換
+- sandbox が侵害されても本物のキーは漏れない
+
 ## CLI Commands
 
 ```bash
@@ -64,9 +73,18 @@ magi run <task>                    # エージェントタスク実行
 magi run <task> --browser          # ブラウザ付きで実行
 magi run <task> --provider openrouter --model <model>
 magi serve                         # Gateway サーバー起動
-magi device invite                 # デバイスペアリング招待
+magi serve --provider openrouter   # LLM provider 指定で起動
+magi device invite                 # デバイスペアリング招待 (QR コード表示)
 magi device list                   # ペアリング済みデバイス一覧
 magi device revoke <id>            # デバイス無効化
+magi secret add <name> <value>     # シークレット登録
+magi secret list                   # シークレット一覧
+magi secret remove <name>          # シークレット削除
+magi sandbox status                # sandbox 状態確認
+magi sandbox snapshot --tag <tag>  # スナップショット撮影
+magi sandbox snapshots             # スナップショット一覧
+magi sandbox restore <tag>         # スナップショットから復元
+magi sandbox reset                 # sandbox 初期化
 ```
 
 ## Gateway API
@@ -81,8 +99,12 @@ Admin (Bearer admin API key):
   GET    /admin/devices            # デバイス一覧
   DELETE /admin/devices/:id        # デバイス無効化
 
+Proxy (sandbox → external API via placeholder replacement):
+  ALL  /proxy/*                    # X-Proxy-URL ヘッダーで転送先指定
+
 Device auth (Bearer device token):
   GET  /api/me                     # 接続確認
+  POST /api/run                    # タスク実行 (SSE ストリーミング)
   POST /api/sandbox/exec           # sandbox でコマンド実行
   GET  /api/sandbox/status         # sandbox 状態
   POST /api/sandbox/snapshot       # スナップショット
