@@ -41,17 +41,24 @@ export function runCommand(ui: UI): Command {
         const model = opts.model ?? config.model;
         const runtime = createLocalRuntime();
 
-        // Create sandbox
-        const sandboxName = `run-${Date.now()}`;
-        ui.info(`Creating sandbox (${opts.image})...`);
-        const sandbox = await runtime.sandbox.create({
-          name: sandboxName,
-          image: opts.image,
-        });
+        // Get or create persistent sandbox
+        const sandboxName = "default";
+        const existing = await runtime.sandbox.get(sandboxName);
+        const sandbox =
+          existing ??
+          (await runtime.sandbox.create({
+            name: sandboxName,
+            image: opts.image,
+          }));
 
         try {
           const stop = ui.spinner.start("Starting sandbox...");
           await sandbox.start();
+          // Ensure clean workspace
+          await sandbox.exec("sh", [
+            "-c",
+            "rm -rf /workspace && mkdir -p /workspace",
+          ]);
           stop("Sandbox ready.", "success");
 
           // Session logger
