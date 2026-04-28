@@ -41,6 +41,14 @@ class LocalSandbox implements Sandbox {
     };
   }
 
+  async copyFrom(): Promise<Buffer> {
+    throw new Error("Local sandbox not yet implemented");
+  }
+
+  async copyTo(): Promise<void> {
+    throw new Error("Local sandbox not yet implemented");
+  }
+
   async snapshot(tag?: string): Promise<SnapshotInfo> {
     return {
       id: `local-${this.id}-${Date.now()}`,

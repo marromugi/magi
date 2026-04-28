@@ -138,7 +138,10 @@ export function runCommand(ui: UI): Command {
           });
 
           // Build agent
-          const sandboxTools = createSandboxTools(sandbox, { env: secretEnv });
+          const sandboxTools = createSandboxTools(sandbox, {
+            env: secretEnv,
+            storage: runtime.storage,
+          });
           const agentConfig = {
             llm,
             model,

@@ -1,6 +1,11 @@
+import type { Sandbox } from "@magi/sandbox";
+import type { StorageProvider } from "@magi/storage";
 import type { Tool, ToolResult } from "../types";
 
-export function createUploadTool(): Tool {
+export function createUploadTool(
+  sandbox: Sandbox,
+  storage: StorageProvider,
+): Tool {
   return {
     name: "upload",
     description:
@@ -19,12 +24,23 @@ export function createUploadTool(): Tool {
       },
       required: ["sourcePath", "destPath"],
     },
-    async execute(): Promise<ToolResult> {
-      // TODO: integrate with StorageProvider to read file and inject into sandbox
+    async execute(input): Promise<ToolResult> {
+      const { sourcePath, destPath } = input as {
+        sourcePath: string;
+        destPath: string;
+      };
+
+      const data = await storage.read(sourcePath);
+      if (!data) {
+        return {
+          output: `File not found in storage: ${sourcePath}`,
+          isError: true,
+        };
+      }
+
+      await sandbox.copyTo(destPath, data);
       return {
-        output:
-          "Upload not yet implemented. Use exec to create files within the sandbox.",
-        isError: true,
+        output: `Uploaded ${sourcePath} → ${destPath} (${data.length} bytes)`,
       };
     },
   };

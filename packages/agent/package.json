@@ -12,7 +12,8 @@
     "@anthropic-ai/sdk": "^0.52.0",
     "@magi/browser": "workspace:*",
     "@magi/db": "workspace:*",
-    "@magi/sandbox": "workspace:*"
+    "@magi/sandbox": "workspace:*",
+    "@magi/storage": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest"

@@ -23,6 +23,7 @@
         "@magi/browser": "workspace:*",
         "@magi/db": "workspace:*",
         "@magi/sandbox": "workspace:*",
+        "@magi/storage": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",

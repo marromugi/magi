@@ -1,4 +1,5 @@
 import type { Sandbox } from "@magi/sandbox";
+import type { StorageProvider } from "@magi/storage";
 import type { Browser } from "@magi/browser";
 import type { AgentConfig, Tool } from "../types";
 import { createExecTool } from "./exec";
@@ -9,17 +10,21 @@ import { createTaskTool } from "./task";
 
 export interface SandboxToolsOptions {
   env?: Record<string, string>;
+  storage?: StorageProvider;
 }
 
 export function createSandboxTools(
   sandbox: Sandbox,
   options?: SandboxToolsOptions,
 ): Tool[] {
-  return [
-    createExecTool(sandbox, { env: options?.env }),
-    createUploadTool(),
-    createDownloadTool(),
-  ];
+  const tools: Tool[] = [createExecTool(sandbox, { env: options?.env })];
+  if (options?.storage) {
+    tools.push(
+      createUploadTool(sandbox, options.storage),
+      createDownloadTool(sandbox, options.storage),
+    );
+  }
+  return tools;
 }
 
 export function createAllTools(

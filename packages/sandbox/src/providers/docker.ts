@@ -130,6 +130,31 @@ class DockerSandbox implements Sandbox {
     return dockerExec(execArgs);
   }
 
+  async copyFrom(sandboxPath: string): Promise<Buffer> {
+    const result = await this.exec("cat", [sandboxPath]);
+    if (result.exitCode !== 0) {
+      throw new Error(`File not found in sandbox: ${sandboxPath}`);
+    }
+    return Buffer.from(result.stdout);
+  }
+
+  async copyTo(sandboxPath: string, data: Buffer): Promise<void> {
+    // Ensure parent dir exists
+    const dir = sandboxPath.substring(0, sandboxPath.lastIndexOf("/"));
+    if (dir) {
+      await this.exec("mkdir", ["-p", dir]);
+    }
+    // Write via base64 to avoid encoding issues
+    const b64 = data.toString("base64");
+    const result = await this.exec("sh", [
+      "-c",
+      `echo '${b64}' | base64 -d > ${sandboxPath}`,
+    ]);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to write file in sandbox: ${result.stderr}`);
+    }
+  }
+
   async snapshot(tag?: string): Promise<SnapshotInfo> {
     const snapshotTag = tag ?? `snap-${Date.now()}`;
     const imageName = `${this.prefix}-snapshot-${this.id}:${snapshotTag}`;

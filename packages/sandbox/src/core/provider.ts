@@ -17,6 +17,8 @@ export interface Sandbox {
     args?: string[],
     options?: ExecOptions,
   ): Promise<ExecResult>;
+  copyFrom(sandboxPath: string): Promise<Buffer>;
+  copyTo(sandboxPath: string, data: Buffer): Promise<void>;
   snapshot(tag?: string): Promise<SnapshotInfo>;
   restore(tag: string): Promise<void>;
 }

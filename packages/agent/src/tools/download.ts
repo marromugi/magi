@@ -1,6 +1,11 @@
+import type { Sandbox } from "@magi/sandbox";
+import type { StorageProvider } from "@magi/storage";
 import type { Tool, ToolResult } from "../types";
 
-export function createDownloadTool(): Tool {
+export function createDownloadTool(
+  sandbox: Sandbox,
+  storage: StorageProvider,
+): Tool {
   return {
     name: "download",
     description:
@@ -19,12 +24,16 @@ export function createDownloadTool(): Tool {
       },
       required: ["sourcePath", "destPath"],
     },
-    async execute(): Promise<ToolResult> {
-      // TODO: integrate with StorageProvider to extract file from sandbox
+    async execute(input): Promise<ToolResult> {
+      const { sourcePath, destPath } = input as {
+        sourcePath: string;
+        destPath: string;
+      };
+
+      const data = await sandbox.copyFrom(sourcePath);
+      await storage.write(destPath, data);
       return {
-        output:
-          "Download not yet implemented. Use exec to read files within the sandbox.",
-        isError: true,
+        output: `Downloaded ${sourcePath} → ${destPath} (${data.length} bytes)`,
       };
     },
   };
