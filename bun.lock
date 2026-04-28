@@ -71,6 +71,7 @@
     "packages/gateway": {
       "name": "@magi/gateway",
       "dependencies": {
+        "@magi/agent": "workspace:*",
         "@magi/auth": "workspace:*",
         "@magi/db": "workspace:*",
         "@magi/kv": "workspace:*",

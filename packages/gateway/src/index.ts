@@ -4,6 +4,7 @@ import { admin } from "./routes/admin";
 import { pair } from "./routes/pair";
 import { sandbox } from "./routes/sandbox";
 import { sessions } from "./routes/sessions";
+import { run } from "./routes/run";
 import { proxy } from "./routes/proxy";
 import { deviceAuth } from "@magi/auth";
 
@@ -26,6 +27,7 @@ api.get("/me", (c) => {
 });
 api.route("/sandbox", sandbox);
 api.route("/sessions", sessions);
+api.route("/run", run);
 app.route("/api", api);
 
 export default app;

@@ -6,6 +6,7 @@ import type {
   SecretRepository,
 } from "@magi/db";
 import type { Sandbox } from "@magi/sandbox";
+import type { LLMProvider } from "@magi/agent";
 
 export type { Device, DeviceStatus, PairingRequest } from "@magi/auth";
 
@@ -17,4 +18,5 @@ export interface Env {
   stepRepository: StepRepository;
   secretRepository: SecretRepository;
   sandbox: Sandbox | null;
+  llm?: LLMProvider;
 }

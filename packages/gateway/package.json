@@ -11,6 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@magi/agent": "workspace:*",
     "@magi/auth": "workspace:*",
     "@magi/db": "workspace:*",
     "@magi/sandbox": "workspace:*",
