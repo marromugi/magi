@@ -45,6 +45,7 @@
       },
       "dependencies": {
         "@magi/agent": "workspace:*",
+        "@magi/gateway": "workspace:*",
         "@magi/runtime": "workspace:*",
         "commander": "^14.0.0",
       },

@@ -4,6 +4,7 @@ import { createUI } from "./ui";
 import { deviceCommand } from "./commands/device";
 import { initCommand } from "./commands/init";
 import { runCommand } from "./commands/run";
+import { serveCommand } from "./commands/serve";
 
 const ui = createUI();
 
@@ -15,5 +16,6 @@ const program = new Command()
 program.addCommand(initCommand(ui));
 program.addCommand(deviceCommand(ui));
 program.addCommand(runCommand(ui));
+program.addCommand(serveCommand(ui));
 
 program.parse();
