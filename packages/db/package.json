@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./providers/sqlite": "./src/providers/sqlite.ts"
+    "./providers/sqlite": "./src/providers/sqlite.ts",
+    "./providers/cloudflare-d1": "./src/providers/cloudflare-d1.ts"
   },
   "scripts": {
     "test": "bun test"

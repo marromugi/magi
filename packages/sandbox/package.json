@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./core": "./src/core/index.ts",
     "./providers/local": "./src/providers/local.ts",
-    "./providers/docker": "./src/providers/docker.ts"
+    "./providers/docker": "./src/providers/docker.ts",
+    "./providers/cloudflare": "./src/providers/cloudflare.ts"
   },
   "scripts": {
     "test": "bun test"

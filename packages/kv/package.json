@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./providers/filesystem": "./src/providers/filesystem.ts"
+    "./providers/filesystem": "./src/providers/filesystem.ts",
+    "./providers/cloudflare-kv": "./src/providers/cloudflare-kv.ts"
   },
   "scripts": {
     "test": "bun test"
