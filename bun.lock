@@ -19,6 +19,7 @@
     "packages/auth": {
       "name": "@magi/auth",
       "dependencies": {
+        "@magi/db": "workspace:*",
         "@magi/kv": "workspace:*",
         "hono": "^4.7.10",
       },
@@ -48,7 +49,9 @@
       "name": "@magi/gateway",
       "dependencies": {
         "@magi/auth": "workspace:*",
+        "@magi/db": "workspace:*",
         "@magi/kv": "workspace:*",
+        "@magi/sandbox": "workspace:*",
         "hono": "^4.7.10",
       },
       "devDependencies": {
