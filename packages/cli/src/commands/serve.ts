@@ -40,6 +40,7 @@ export function serveCommand(ui: UI): Command {
         deviceRepository: runtime.db.devices,
         sessionRepository: runtime.db.sessions,
         stepRepository: runtime.db.steps,
+        secretRepository: runtime.db.secrets,
         sandbox,
       };
 

@@ -4,6 +4,7 @@ import { admin } from "./routes/admin";
 import { pair } from "./routes/pair";
 import { sandbox } from "./routes/sandbox";
 import { sessions } from "./routes/sessions";
+import { proxy } from "./routes/proxy";
 import { deviceAuth } from "@magi/auth";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -11,6 +12,7 @@ const app = new Hono<{ Bindings: Env }>();
 // Public routes
 app.get("/health", (c) => c.json({ ok: true }));
 app.route("/pair", pair);
+app.route("/proxy", proxy);
 
 // Admin routes (CLI)
 app.route("/admin", admin);

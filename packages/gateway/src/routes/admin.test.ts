@@ -22,6 +22,7 @@ beforeEach(async () => {
     deviceRepository: db.devices,
     sessionRepository: db.sessions,
     stepRepository: db.steps,
+    secretRepository: db.secrets,
     sandbox: null,
   };
 });

@@ -235,4 +235,68 @@ describe("SQLiteDatabase", () => {
       expect(s1Steps[0]!.content).toBe("from s1");
     });
   });
+
+  describe("secrets", () => {
+    it("inserts and finds by name", async () => {
+      await db.secrets.insert({
+        name: "TWITTER_API_KEY",
+        value: "sk-real-secret",
+        placeholder: "magi_s_abc123",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+
+      const found = await db.secrets.findByName("TWITTER_API_KEY");
+      expect(found).not.toBeNull();
+      expect(found!.value).toBe("sk-real-secret");
+      expect(found!.placeholder).toBe("magi_s_abc123");
+    });
+
+    it("returns null for missing name", async () => {
+      const found = await db.secrets.findByName("NONEXISTENT");
+      expect(found).toBeNull();
+    });
+
+    it("finds by placeholder", async () => {
+      await db.secrets.insert({
+        name: "MY_KEY",
+        value: "real-value",
+        placeholder: "magi_s_xyz789",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+
+      const found = await db.secrets.findByPlaceholder("magi_s_xyz789");
+      expect(found).not.toBeNull();
+      expect(found!.name).toBe("MY_KEY");
+    });
+
+    it("lists all secrets", async () => {
+      await db.secrets.insert({
+        name: "KEY_A",
+        value: "val-a",
+        placeholder: "magi_s_aaa",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+      await db.secrets.insert({
+        name: "KEY_B",
+        value: "val-b",
+        placeholder: "magi_s_bbb",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+
+      const all = await db.secrets.list();
+      expect(all).toHaveLength(2);
+    });
+
+    it("deletes a secret", async () => {
+      await db.secrets.insert({
+        name: "TO_DELETE",
+        value: "val",
+        placeholder: "magi_s_del",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+      await db.secrets.delete("TO_DELETE");
+      const found = await db.secrets.findByName("TO_DELETE");
+      expect(found).toBeNull();
+    });
+  });
 });

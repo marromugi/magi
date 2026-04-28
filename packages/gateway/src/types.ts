@@ -3,6 +3,7 @@ import type {
   DeviceRepository,
   SessionRepository,
   StepRepository,
+  SecretRepository,
 } from "@magi/db";
 import type { Sandbox } from "@magi/sandbox";
 
@@ -14,5 +15,6 @@ export interface Env {
   deviceRepository: DeviceRepository;
   sessionRepository: SessionRepository;
   stepRepository: StepRepository;
+  secretRepository: SecretRepository;
   sandbox: Sandbox | null;
 }

@@ -49,6 +49,13 @@ export function runCommand(ui: UI): Command {
         const model = opts.model ?? config.model;
         const runtime = createLocalRuntime();
 
+        // Load secrets as placeholder env vars
+        const secrets = await runtime.db.secrets.list();
+        const secretEnv: Record<string, string> = {};
+        for (const s of secrets) {
+          secretEnv[s.name] = s.placeholder;
+        }
+
         // Get or create persistent sandbox
         const sandboxName = "default";
         const existing = await runtime.sandbox.get(sandboxName);
@@ -57,6 +64,7 @@ export function runCommand(ui: UI): Command {
           (await runtime.sandbox.create({
             name: sandboxName,
             image: opts.image,
+            env: secretEnv,
           }));
 
         // Chrome sandbox (separate container for browser)

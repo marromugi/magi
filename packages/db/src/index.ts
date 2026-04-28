@@ -9,4 +9,6 @@ export type {
   StepRepository,
   StepRecord,
   StepType,
+  SecretRepository,
+  SecretRecord,
 } from "./types";

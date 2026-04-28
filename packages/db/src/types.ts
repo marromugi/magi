@@ -3,6 +3,7 @@ export interface DatabaseProvider {
   devices: DeviceRepository;
   sessions: SessionRepository;
   steps: StepRepository;
+  secrets: SecretRepository;
   close(): void;
 }
 
@@ -65,4 +66,21 @@ export interface StepRecord {
 export interface StepRepository {
   insert(step: StepRecord): Promise<void>;
   listBySessionId(sessionId: string): Promise<StepRecord[]>;
+}
+
+// Secret
+
+export interface SecretRecord {
+  name: string;
+  value: string;
+  placeholder: string;
+  createdAt: string;
+}
+
+export interface SecretRepository {
+  insert(secret: SecretRecord): Promise<void>;
+  findByName(name: string): Promise<SecretRecord | null>;
+  findByPlaceholder(placeholder: string): Promise<SecretRecord | null>;
+  list(): Promise<SecretRecord[]>;
+  delete(name: string): Promise<void>;
 }

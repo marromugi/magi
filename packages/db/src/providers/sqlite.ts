@@ -11,6 +11,8 @@ import type {
   SessionStatus,
   StepRepository,
   StepRecord,
+  SecretRepository,
+  SecretRecord,
 } from "../types";
 
 // Device
@@ -201,6 +203,62 @@ class SQLiteStepRepository implements StepRepository {
   }
 }
 
+// Secret
+
+interface SecretRow {
+  name: string;
+  value: string;
+  placeholder: string;
+  created_at: string;
+}
+
+function secretRowToRecord(row: SecretRow): SecretRecord {
+  return {
+    name: row.name,
+    value: row.value,
+    placeholder: row.placeholder,
+    createdAt: row.created_at,
+  };
+}
+
+class SQLiteSecretRepository implements SecretRepository {
+  constructor(private db: Database) {}
+
+  async insert(secret: SecretRecord): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO secrets (name, value, placeholder, created_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(secret.name, secret.value, secret.placeholder, secret.createdAt);
+  }
+
+  async findByName(name: string): Promise<SecretRecord | null> {
+    const row = this.db
+      .prepare("SELECT * FROM secrets WHERE name = ?")
+      .get(name) as SecretRow | null;
+    return row ? secretRowToRecord(row) : null;
+  }
+
+  async findByPlaceholder(placeholder: string): Promise<SecretRecord | null> {
+    const row = this.db
+      .prepare("SELECT * FROM secrets WHERE placeholder = ?")
+      .get(placeholder) as SecretRow | null;
+    return row ? secretRowToRecord(row) : null;
+  }
+
+  async list(): Promise<SecretRecord[]> {
+    const rows = this.db
+      .prepare("SELECT * FROM secrets ORDER BY name ASC")
+      .all() as SecretRow[];
+    return rows.map(secretRowToRecord);
+  }
+
+  async delete(name: string): Promise<void> {
+    this.db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
+  }
+}
+
 // Database
 
 export class SQLiteDatabase implements DatabaseProvider {
@@ -208,6 +266,7 @@ export class SQLiteDatabase implements DatabaseProvider {
   readonly devices: DeviceRepository;
   readonly sessions: SessionRepository;
   readonly steps: StepRepository;
+  readonly secrets: SecretRepository;
   private db: Database;
 
   constructor(path: string) {
@@ -218,6 +277,7 @@ export class SQLiteDatabase implements DatabaseProvider {
     this.devices = new SQLiteDeviceRepository(this.db);
     this.sessions = new SQLiteSessionRepository(this.db);
     this.steps = new SQLiteStepRepository(this.db);
+    this.secrets = new SQLiteSecretRepository(this.db);
   }
 
   private migrate(): void {
@@ -251,6 +311,13 @@ export class SQLiteDatabase implements DatabaseProvider {
       );
 
       CREATE INDEX IF NOT EXISTS idx_steps_session_id ON steps(session_id);
+
+      CREATE TABLE IF NOT EXISTS secrets (
+        name TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        placeholder TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
     `);
   }
 
