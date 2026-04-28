@@ -5,6 +5,7 @@ export interface SandboxConfig {
   memoryMib?: number;
   env?: Record<string, string>;
   ports?: Record<number, number>; // container port → host port
+  command?: string[]; // override default command
 }
 
 export interface ExecResult {

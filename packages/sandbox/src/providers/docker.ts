@@ -73,8 +73,11 @@ class DockerSandbox implements Sandbox {
         }
       }
 
-      // Keep container alive with tail -f /dev/null
-      args.push(this.config.image, "tail", "-f", "/dev/null");
+      // Use custom command or default to keeping container alive
+      args.push(
+        this.config.image,
+        ...(this.config.command ?? ["tail", "-f", "/dev/null"]),
+      );
 
       const create = await dockerExec(args);
       if (create.exitCode !== 0) {
@@ -153,7 +156,10 @@ class DockerSandbox implements Sandbox {
       }
     }
 
-    args.push(imageName, "tail", "-f", "/dev/null");
+    args.push(
+      imageName,
+      ...(this.config.command ?? ["tail", "-f", "/dev/null"]),
+    );
 
     const create = await dockerExec(args);
     if (create.exitCode !== 0) {

@@ -6,11 +6,17 @@ import {
   AnthropicProvider,
   OpenRouterProvider,
   createSandboxTools,
+  createBrowserTool,
   createTaskTool,
   createSessionLogger,
 } from "@magi/agent";
+import { Browser } from "@magi/browser";
 import type { LLMProvider } from "@magi/agent";
 import type { UI } from "../ui";
+
+const CDP_PORT = 9222;
+const CDP_HOST_PORT = 9223;
+const CHROME_IMAGE = "zenika/alpine-chrome:latest";
 
 export function runCommand(ui: UI): Command {
   return new Command("run")
@@ -25,6 +31,7 @@ export function runCommand(ui: UI): Command {
       "LLM provider (anthropic, openrouter)",
       "anthropic",
     )
+    .option("--browser", "Enable browser tool with Chrome")
     .action(
       async (
         task: string,
@@ -34,6 +41,7 @@ export function runCommand(ui: UI): Command {
           systemPrompt?: string;
           maxSteps: string;
           provider: string;
+          browser?: boolean;
         },
       ) => {
         const config = await readConfig(defaultConfigPath());
@@ -51,15 +59,69 @@ export function runCommand(ui: UI): Command {
             image: opts.image,
           }));
 
+        // Chrome sandbox (separate container for browser)
+        let browserInstance: Browser | undefined;
+        let chromeSandboxName: string | undefined;
+
         try {
           const stop = ui.spinner.start("Starting sandbox...");
           await sandbox.start();
-          // Ensure clean workspace
           await sandbox.exec("sh", [
             "-c",
             "rm -rf /workspace && mkdir -p /workspace",
           ]);
           stop("Sandbox ready.", "success");
+
+          // Start Chrome if --browser flag
+          if (opts.browser) {
+            const stopBrowser = ui.spinner.start("Starting browser...");
+            chromeSandboxName = "chrome";
+            const chromeExisting = await runtime.sandbox.get(chromeSandboxName);
+            const chromeSandbox =
+              chromeExisting ??
+              (await runtime.sandbox.create({
+                name: chromeSandboxName,
+                image: CHROME_IMAGE,
+                ports: { [CDP_PORT]: CDP_HOST_PORT },
+                command: [
+                  "--no-sandbox",
+                  "--remote-debugging-address=0.0.0.0",
+                  `--remote-debugging-port=${CDP_PORT}`,
+                  "--headless",
+                  "about:blank",
+                ],
+              }));
+            await chromeSandbox.start();
+
+            // Wait for Chrome to be ready
+            await waitForChrome(CDP_HOST_PORT);
+
+            // Connect browser
+            const pages = await fetch(
+              `http://localhost:${CDP_HOST_PORT}/json/list`,
+            );
+            const list = (await pages.json()) as Array<{
+              webSocketDebuggerUrl: string;
+            }>;
+
+            let cdpUrl: string;
+            if (list.length > 0 && list[0]) {
+              cdpUrl = list[0].webSocketDebuggerUrl;
+            } else {
+              // Create a new page
+              const newPage = await fetch(
+                `http://localhost:${CDP_HOST_PORT}/json/new`,
+              );
+              const page = (await newPage.json()) as {
+                webSocketDebuggerUrl: string;
+              };
+              cdpUrl = page.webSocketDebuggerUrl;
+            }
+
+            browserInstance = new Browser({ cdpUrl });
+            await browserInstance.connect();
+            stopBrowser("Browser ready.", "success");
+          }
 
           // Session logger
           const sessionId = crypto.randomUUID();
@@ -78,8 +140,11 @@ export function runCommand(ui: UI): Command {
             maxSteps: parseInt(opts.maxSteps, 10),
             session,
           };
-          // Add task tool with access to same config
-          agentConfig.tools = [...sandboxTools, createTaskTool(agentConfig)];
+          const tools = [...sandboxTools, createTaskTool(agentConfig)];
+          if (browserInstance) {
+            tools.push(createBrowserTool(browserInstance));
+          }
+          agentConfig.tools = tools;
 
           const agent = new Agent(agentConfig);
 
@@ -122,12 +187,29 @@ export function runCommand(ui: UI): Command {
           );
           process.exit(1);
         } finally {
+          if (browserInstance) {
+            await browserInstance.close();
+          }
           const stopClean = ui.spinner.start("Stopping sandbox...");
           await sandbox.stop();
           stopClean("Sandbox stopped.", "success");
         }
       },
     );
+}
+
+async function waitForChrome(port: number, maxWaitMs = 15000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      const res = await fetch(`http://localhost:${port}/json/version`);
+      if (res.ok) return;
+    } catch {
+      // not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("Chrome did not start in time");
 }
 
 function truncate(s: string, max: number): string {
